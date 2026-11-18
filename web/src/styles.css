@@ -322,3 +322,27 @@ button.live-card.playable:hover { transform: translateY(-3px); }
 .guide li { margin: 4px 0; }
 .streamtest { margin: -4px 0 14px; }
 .streamtest p { margin: 8px 0 0; font-size: 14px; }
+
+/* ---------- channels and TV guide ---------- */
+.guide-note { margin: -6px 0 16px; }
+.guide-list { display: grid; gap: 10px; }
+.guide-row { display: flex; align-items: center; gap: 16px; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; text-align: left; color: inherit; font: inherit; cursor: pointer; transition: background .15s, transform .15s; }
+.guide-row:hover { background: var(--panel2); transform: translateY(-2px); }
+.ch-num { flex: none; width: 46px; height: 46px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; color: #14110a; }
+.ch-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.ch-name { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.ch-now { font-weight: 700; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-bar { display: block; height: 4px; background: #2a2a40; border-radius: 2px; overflow: hidden; }
+.ch-bar i { display: block; height: 100%; }
+.ch-next { flex: none; color: var(--muted); font-size: 13px; max-width: 260px; text-align: right; }
+.chan-back { z-index: 60; }
+.chan { background: var(--panel); border-radius: 16px; max-width: 860px; width: 100%; max-height: 92vh; overflow: auto; }
+.chan .player { border-radius: 16px 16px 0 0; }
+.chan-body { padding: 18px 24px 24px; position: relative; }
+.chan-body h2 { margin: 6px 0 4px; }
+.chan-meta { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 8px; margin: 0; }
+.chan-sched { margin-top: 12px; }
+@media (max-width: 700px) {
+  .guide-row { flex-wrap: wrap; }
+  .ch-next { flex-basis: 100%; text-align: left; max-width: none; }
+}

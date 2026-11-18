@@ -46,6 +46,14 @@ const DEMO = {
   ],
 }
 
+// Give demo films a playable video and a length so the demo channels have something to schedule.
+const DEMO_TRAILER = 'https://vz-0bae8f18-f47.b-cdn.net/60efa6ca-0209-4dc4-b309-e9f5488c0d4a/playlist.m3u8'
+DEMO.films.forEach((m) => { if (!m.video_url) { m.video_url = DEMO_TRAILER; m.duration_sec = 128 } else { m.duration_sec = 5518 } })
+DEMO.festivals[0].auto_channel = true
+DEMO.festivals[0].channel_order = 'listed'
+DEMO.festivals[1].auto_channel = true
+DEMO.festivals[1].channel_order = 'shuffle'
+
 // Flat queries merged in JS (PostgREST FK joins are unreliable on this stack).
 export async function loadData() {
   if (!supabase) return DEMO

@@ -39,3 +39,13 @@ screening package (master/DCP/subtitle links + tech notes) with downloadable per
 (#/theater/<festival-slug>: day/venue playlist, intro cards, fullscreen, pause/skip, MP4 preload, attendance log).
 Notes: DCP/KDM creation is not built (use DCP-o-matic or a partner service); theatrical rights must be confirmed
 with filmmakers separately from streaming rights; HDMI playback has no DCP-style encryption.
+
+## Automatic festival channels (2026-11-18)
+Modeled on WatchSpree TV FAST channels (read-only reference: WatchSpree-TV/public/js/app.js nowOn()).
+Each festival can switch on a channel (festivals.auto_channel, channel_order listed|newest|shuffle). Films play back to
+back on a wall-clock schedule: position = (now seconds) mod (sum of film lengths). Everyone sees the same film at the
+same moment. Festaview Mix (channel 1) shuffles all opted-in festivals' films. Web: TV guide on home page, channel card
+on festival pages, ChannelPlayer (joins at the right offset, auto-advances). Film lengths: films.duration_sec, detected
+from the HLS playlist or MP4 metadata (fallback: runtime_min). Migration: 006_channels.sql.
+Not built: the same channels on the Roku app (needs the schedule math ported to BrightScript); real live streams in
+the guide; adding or removing films shifts the schedule for everyone (cycle length changes).

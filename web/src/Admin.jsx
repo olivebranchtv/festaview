@@ -7,7 +7,7 @@ const num = (v) => (v === '' || v == null ? '' : parseInt(v, 10) || '')
 
 const EMPTY_FILM = {
   title: '', synopsis: '', director: '', year: '', runtime_min: '', country: '', language: '', genre: '', rating: '',
-  poster_url: '', video_url: '', trailer_url: '', captions_url: '', status: 'draft',
+  poster_url: '', video_url: '', trailer_url: '', captions_url: '', duration_sec: '', status: 'draft',
   premiere_at: '', available_from: '', available_until: '',
 }
 const EMPTY_FEED = { name: '', stream_url: '', poster_url: '', is_live: false, is_replay_loop: true }
@@ -83,6 +83,7 @@ function FestivalTab({ festival, onSaved, setMsg }) {
         id: f.id, name: f.name, tagline: f.tagline, description: f.description, brand_color: f.brand_color,
         website: f.website, logo_url: f.logo_url, banner_url: f.banner_url, status: f.status, voting_open: !!f.voting_open,
         location: f.location, starts_on: f.starts_on, ends_on: f.ends_on, passes_url: f.passes_url,
+        auto_channel: !!f.auto_channel, channel_order: f.channel_order || 'listed',
       })
       onSaved(saved); setMsg('Festival saved.')
     } catch (x) { setMsg(x.message, true) }
@@ -105,6 +106,20 @@ function FestivalTab({ festival, onSaved, setMsg }) {
       <label className="check">
         <input type="checkbox" checked={!!f.voting_open} onChange={(e) => set('voting_open')(e.target.checked)} /> Audience Choice voting is open (shows a vote button on each film)
       </label>
+      <div className="subpanel">
+        <h3>Automatic festival channel</h3>
+        <p className="note small">Plays your published films back to back on a schedule, like a TV channel. Everyone tuned in sees the same film at the same time. It appears in the Festaview TV guide and on your page. Each film needs a video link and a length.</p>
+        <label className="check">
+          <input type="checkbox" checked={!!f.auto_channel} onChange={(e) => set('auto_channel')(e.target.checked)} /> Run an automatic channel for my festival
+        </label>
+        <Field label="Order of films">
+          <select value={f.channel_order || 'listed'} onChange={(e) => set('channel_order')(e.target.value)}>
+            <option value="listed">In the order you added them</option>
+            <option value="newest">Newest first</option>
+            <option value="shuffle">Shuffled (same order for every viewer)</option>
+          </select>
+        </Field>
+      </div>
       <Field label="Visibility" hint="Draft festivals are hidden from the public site and the Roku app.">
         <select value={f.status} onChange={(e) => set('status')(e.target.value)}>
           <option value="draft">Draft (hidden)</option>
@@ -126,13 +141,28 @@ function FilmsTab({ festival, setMsg }) {
   const set = (k) => (v) => setEdit((p) => ({ ...p, [k]: v }))
   const save = async (e) => {
     e.preventDefault()
-    const row = { ...edit, year: num(edit.year), runtime_min: num(edit.runtime_min) }
+    const row = { ...edit, year: num(edit.year), runtime_min: num(edit.runtime_min), duration_sec: num(edit.duration_sec) }
+    if (!row.duration_sec && row.video_url) { const d = await detectDuration(row.video_url); if (d) row.duration_sec = d }
+    if (!row.runtime_min && row.duration_sec) row.runtime_min = Math.round(row.duration_sec / 60)
     for (const k of ['premiere_at', 'available_from', 'available_until']) row[k] = fromLocal(edit[k])
     try { await api.saveFilm(festival.id, row); setEdit(null); setMsg('Film saved.'); refresh() } catch (x) { setMsg(x.message, true) }
   }
   const del = async (m) => {
     if (!window.confirm('Delete "' + m.title + '"? This cannot be undone.')) return
     try { await api.deleteFilm(m.id); refresh() } catch (x) { setMsg(x.message, true) }
+  }
+  const detectAll = async () => {
+    let n = 0
+    try {
+      for (const m of films) {
+        if (m.video_url && !m.duration_sec) {
+          const d = await detectDuration(m.video_url)
+          if (d) { await api.saveFilm(festival.id, { id: m.id, duration_sec: d }); n++ }
+        }
+      }
+      setMsg(n ? 'Detected the length of ' + n + (n === 1 ? ' film.' : ' films.') : 'No missing lengths to detect.')
+      refresh()
+    } catch (x) { setMsg(x.message, true) }
   }
   const open = (m) => setEdit(m ? { ...EMPTY_FILM, ...m, premiere_at: toLocal(m.premiere_at), available_from: toLocal(m.available_from), available_until: toLocal(m.available_until) } : { ...EMPTY_FILM })
 
@@ -154,6 +184,10 @@ function FilmsTab({ festival, setMsg }) {
         <ImageField label="Poster (16:9 works best on Roku)" value={edit.poster_url} onChange={set('poster_url')} festivalId={festival.id} onError={(m) => setMsg(m, true)} />
         <Field label="Video URL" hint="Direct link to an HLS (.m3u8) or MP4 file. Roku plays these formats. Recommended host: Bunny Stream (bunny.net). Upload your film there and paste its HLS playlist link here.">
           <input value={edit.video_url || ''} onChange={(e) => set('video_url')(e.target.value)} placeholder="https://.../film.m3u8" />
+        </Field>
+        <Field label="Exact length in seconds" hint="Used to schedule your automatic festival channel. Filled in for you when you save, or press Detect.">
+          <input value={edit.duration_sec ?? ''} onChange={(e) => set('duration_sec')(e.target.value)} inputMode="numeric" />
+          <button type="button" className="btn ghost small" onClick={async () => { const d = await detectDuration(edit.video_url || ''); if (d) set('duration_sec')(String(d)); else setMsg('Could not read the length. Check the video link.', true) }}>Detect length</button>
         </Field>
         <Field label="Trailer URL"><input value={edit.trailer_url || ''} onChange={(e) => set('trailer_url')(e.target.value)} /></Field>
         <Field label="Captions URL (WebVTT or SRT)"><input value={edit.captions_url || ''} onChange={(e) => set('captions_url')(e.target.value)} /></Field>
@@ -181,7 +215,10 @@ function FilmsTab({ festival, setMsg }) {
 
   return (
     <div className="panel">
-      <div className="actions"><button className="btn" onClick={() => open(null)}>Add film</button></div>
+      <div className="actions">
+        <button className="btn" onClick={() => open(null)}>Add film</button>
+        <button className="btn ghost" onClick={detectAll}>Detect missing lengths</button>
+      </div>
       {films.length === 0 && <p className="note">No films yet. Add your first selection.</p>}
       <ul className="list">
         {films.map((m) => (
@@ -492,6 +529,32 @@ async function testStream(url) {
   } catch {
     return { ok: false, message: 'Your browser could not read this link. It may be offline, or the host may not allow websites to play it. Ask your streaming provider about "CORS".' }
   }
+}
+
+// Works out a film's exact length in seconds: adds up the segments of an HLS playlist, or reads an MP4's metadata.
+async function detectDuration(url) {
+  try {
+    if (/\.m3u8(\?|$)/i.test(url)) {
+      let text = await (await fetch(url)).text()
+      if (text.includes('#EXT-X-STREAM-INF')) {
+        const lines = text.split(/\r?\n/)
+        const idx = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'))
+        const uri = lines.slice(idx + 1).find((l) => l && !l.startsWith('#'))
+        if (!uri) return 0
+        text = await (await fetch(new URL(uri, url).toString())).text()
+      }
+      if (text.includes('#EXT-X-STREAM-INF') || !text.includes('#EXT-X-ENDLIST')) return 0
+      const sum = [...text.matchAll(/#EXTINF:([\d.]+)/g)].reduce((a, m) => a + parseFloat(m[1]), 0)
+      return sum > 0 ? Math.round(sum) : 0
+    }
+    return await new Promise((resolve) => {
+      const v = document.createElement('video')
+      v.preload = 'metadata'
+      v.onloadedmetadata = () => resolve(Number.isFinite(v.duration) ? Math.round(v.duration) : 0)
+      v.onerror = () => resolve(0)
+      v.src = url
+    })
+  } catch { return 0 }
 }
 
 function StreamTest({ url }) {

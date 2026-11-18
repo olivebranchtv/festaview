@@ -1,11 +1,13 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { loadData, castVote, submitInquiry } from './data.js'
+import { buildChannels, nowOn, schedule, clock } from './channels.js'
 
 // Loaded on demand so the public home page stays light (video player, admin and owner console are separate chunks).
 const Admin = lazy(() => import('./Admin.jsx'))
 const Network = lazy(() => import('./Network.jsx'))
 const Player = lazy(() => import('./Player.jsx'))
 const Theater = lazy(() => import('./Theater.jsx'))
+const ChannelPlayer = lazy(() => import('./ChannelPlayer.jsx'))
 import { CONTACT_EMAIL, ROKU_URL } from './config.js'
 
 function useHashRoute() {
@@ -160,6 +162,7 @@ function Header({ go }) {
       <a href="#/" className="brand"><span className="mark" aria-hidden="true" />FESTAVIEW</a>
       <nav className="nav">
         <button onClick={() => go('festivals')}>Festivals</button>
+        <button onClick={() => go('guide')}>TV guide</button>
         <button onClick={() => go('live')}>Live</button>
         <button onClick={() => go('devices')}>Watch</button>
         <button onClick={() => go('for-festivals')}>For festivals</button>
@@ -384,7 +387,42 @@ function Footer() {
   )
 }
 
-function Hub({ data, go, onOpen }) {
+// Re-renders on a timer so "now playing" stays current.
+function useTick(ms) {
+  const [, set] = useState(0)
+  useEffect(() => { const t = setInterval(() => set((x) => x + 1), ms); return () => clearInterval(t) }, [ms])
+}
+
+function ChannelRow({ ch, onChannel }) {
+  const n = nowOn(ch)
+  const pct = Math.min(100, (n.offset / n.item.duration) * 100)
+  return (
+    <button className="guide-row" onClick={() => onChannel(ch.id)}>
+      <span className="ch-num" style={{ background: ch.color }}>{ch.number}</span>
+      <span className="ch-main">
+        <span className="ch-name"><span className="pill live">Live</span> {ch.name}</span>
+        <span className="ch-now">{n.item.title}</span>
+        <span className="ch-bar"><i style={{ width: pct + '%', background: ch.color }} /></span>
+      </span>
+      <span className="ch-next">{clock(n.remaining)} left{ch.items.length > 1 ? ' | Up next: ' + n.next.title : ''}</span>
+    </button>
+  )
+}
+
+function TvGuide({ data, onChannel }) {
+  useTick(30000)
+  const chans = buildChannels(data)
+  if (!chans.length) return null
+  return (
+    <section id="guide" className="block">
+      <h2>TV guide</h2>
+      <p className="note guide-note">Festival channels play on a schedule. Tune in and you join whatever is on right now.</p>
+      <div className="guide-list">{chans.map((c) => <ChannelRow key={c.id} ch={c} onChannel={onChannel} />)}</div>
+    </section>
+  )
+}
+
+function Hub({ data, go, onOpen, onChannel }) {
   const stats = {
     festivals: data.festivals.length,
     films: data.films.length,
@@ -393,6 +431,7 @@ function Hub({ data, go, onOpen }) {
   return (
     <>
       <Hero go={go} stats={stats} festivals={data.festivals} />
+      <TvGuide data={data} onChannel={onChannel} />
       <LiveSection data={data} />
       <Featured data={data} onOpen={onOpen} />
       <FestivalGrid data={data} />
@@ -473,7 +512,8 @@ function fmtDates(a, b) {
 }
 
 // A festival's own landing page: branded hero, spotlight film, about, live, schedule, theaters and the full selection.
-function Festival({ data, slug, onOpen }) {
+function Festival({ data, slug, onOpen, onChannel }) {
+  useTick(30000)
   const [genre, setGenre] = useState('')
   const [q, setQ] = useState('')
   const fest = data.festivals.find((f) => f.slug === slug)
@@ -493,7 +533,8 @@ function Festival({ data, slug, onOpen }) {
   const totalMin = films.reduce((a, m) => a + (Number(m.runtime_min) || 0), 0)
   const dates = fmtDates(fest.starts_on, fest.ends_on)
   const to = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
-  const nav = [['about', 'About'], films.length ? ['selection', 'Films'] : null, feeds.length ? ['live', 'Live'] : null, sched.length ? ['schedule', 'Schedule'] : null, theaterShows.length ? ['theaters', 'In theaters'] : null].filter(Boolean)
+  const chan = buildChannels(data).find((c) => c.festivalId === fest.id)
+  const nav = [['about', 'About'], chan ? ['channel', 'Channel'] : null, films.length ? ['selection', 'Films'] : null, feeds.length ? ['live', 'Live'] : null, sched.length ? ['schedule', 'Schedule'] : null, theaterShows.length ? ['theaters', 'In theaters'] : null].filter(Boolean)
   const meta = (m) => [m.year, m.runtime_min ? m.runtime_min + ' min' : null, m.genre, m.rating].filter(Boolean).join('  |  ')
 
   return (
@@ -544,6 +585,24 @@ function Festival({ data, slug, onOpen }) {
               {!featured.video_url && <button className="btn" onClick={() => onOpen(featured)}>Details</button>}
             </div>
           </div>
+        </section>
+      )}
+
+      {chan && (
+        <section id="channel" className="block">
+          <h2>{fest.name} Channel</h2>
+          <div className="guide-list"><ChannelRow ch={chan} onChannel={onChannel} /></div>
+          {(() => {
+            const next = schedule(chan, 4).slice(1)
+            if (!next.length || chan.items.length < 2) return null
+            return (
+              <ul className="schedule">
+                {next.map((p, i) => (
+                  <li key={i}><span className="when">{new Date(p.start).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span><strong>{p.item.title}</strong></li>
+                ))}
+              </ul>
+            )
+          })()}
         </section>
       )}
 
@@ -644,7 +703,8 @@ export default function App() {
   const [open, setOpen] = useState(null)
 
   // Close any open film popup when the page changes.
-  useEffect(() => { setOpen(null) }, [hash])
+  const [channel, setChannel] = useState(null)
+  useEffect(() => { setOpen(null); setChannel(null) }, [hash])
 
   useEffect(() => {
     loadData().then(setData).catch(() => setError('Festaview is having trouble loading right now. Please refresh in a moment.'))
@@ -677,9 +737,10 @@ export default function App() {
         {isPublic && error && <p className="note pad">{error}</p>}
         {isPublic && !data && !error && <p className="note pad">Loading...</p>}
         {isPublic && data && data.demo && <p className="banner">Demo content. Connect Supabase to show real festivals.</p>}
-        {isPublic && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} /> : <Hub data={data} go={go} onOpen={openFilm} />)}
+        {isPublic && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} onChannel={setChannel} /> : <Hub data={data} go={go} onOpen={openFilm} onChannel={setChannel} />)}
       </main>
       {isPublic && <Footer />}
+      {channel && data && <Suspense fallback={null}><ChannelPlayer channelId={channel} data={data} onClose={() => setChannel(null)} /></Suspense>}
       {open && <FilmModal key={open.id + openMode} film={open} festival={openFest} startMode={openMode} onClose={() => setOpen(null)} />}
     </div>
   )
