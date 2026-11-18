@@ -3,6 +3,6 @@
 function FestaviewConfig() as object
   return {
     supabaseUrl: "https://ckxwyhyjokpamgygdsoq.supabase.co"
-    supabaseAnonKey: "YOUR-ANON-KEY"
+    supabaseAnonKey: "sb_publishable_LyDs-buM_wSgTzJoM0ue7Q_ZTrrlizY"
   }
 end function

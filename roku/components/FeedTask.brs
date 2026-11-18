@@ -10,7 +10,7 @@ function httpGetJson(path as string) as object
   req = CreateObject("roUrlTransfer")
   req.SetCertificatesFile("common:/certs/ca-bundle.crt")
   req.AddHeader("apikey", cfg.supabaseAnonKey)
-  req.AddHeader("Authorization", "Bearer " + cfg.supabaseAnonKey)
+  ' New-style sb_publishable_ keys go in the apikey header only (not as a Bearer token).
   req.SetUrl(cfg.supabaseUrl + "/rest/v1/" + path)
   body = req.GetToString()
   if body = "" then return invalid
