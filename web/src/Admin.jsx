@@ -223,6 +223,7 @@ function LiveTab({ festival, setMsg }) {
         <Field label="Stream URL" hint="HLS (.m3u8) live stream or a looping replay playlist.">
           <input value={edit.stream_url || ''} onChange={(e) => set('stream_url')(e.target.value)} placeholder="https://.../live.m3u8" />
         </Field>
+        <StreamTest url={edit.stream_url} />
         <ImageField label="Channel artwork" value={edit.poster_url} onChange={set('poster_url')} festivalId={festival.id} onError={(m) => setMsg(m, true)} />
         <label className="check"><input type="checkbox" checked={!!edit.is_live} onChange={(e) => set('is_live')(e.target.checked)} /> Live right now</label>
         <label className="check"><input type="checkbox" checked={!!edit.is_replay_loop} onChange={(e) => set('is_replay_loop')(e.target.checked)} /> Show as a 24/7 replay channel</label>
@@ -235,6 +236,7 @@ function LiveTab({ festival, setMsg }) {
   }
   return (
     <div className="panel">
+      <GoingLiveGuide />
       <div className="actions"><button className="btn" onClick={() => setEdit({ ...EMPTY_FEED })}>Add live channel</button></div>
       {feeds.length === 0 && <p className="note">No live channels yet.</p>}
       <ul className="list">
@@ -456,6 +458,80 @@ function FilmmakerShares({ film, setMsg }) {
         <button type="button" className="btn ghost" onClick={add}>Add</button>
       </div>
     </div>
+  )
+}
+
+// Reads an HLS link the same way a viewer's browser would, and says whether it is live, recorded, or broken.
+async function testStream(url) {
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return { ok: false, message: 'The link answered with an error (' + res.status + '). If this is a live event, the stream may not have started yet.' }
+    const text = await res.text()
+    if (!text.trim().startsWith('#EXTM3U')) return { ok: false, message: 'This does not look like an HLS playlist. The link should end in .m3u8.' }
+    let media = text
+    let sizes = []
+    if (text.includes('#EXT-X-STREAM-INF')) {
+      const lines = text.split(/\r?\n/)
+      sizes = lines.filter((l) => l.startsWith('#EXT-X-STREAM-INF')).map((l) => (/RESOLUTION=(\d+x\d+)/.exec(l) || [])[1]).filter(Boolean)
+      const idx = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'))
+      const uri = lines.slice(idx + 1).find((l) => l && !l.startsWith('#'))
+      if (uri) {
+        const r2 = await fetch(new URL(uri, url).toString(), { cache: 'no-store' })
+        if (r2.ok) media = await r2.text()
+      }
+    }
+    const live = !media.includes('#EXT-X-ENDLIST')
+    return {
+      ok: true,
+      live,
+      message: (live
+        ? 'Working. This stream is live (it has no end marker), so viewers will see the broadcast as it happens.'
+        : 'Working. This is recorded video with a fixed length. It suits a replay channel, not a live event.')
+        + (sizes.length ? ' Quality levels: ' + sizes.join(', ') + '.' : ' Single quality level.'),
+    }
+  } catch {
+    return { ok: false, message: 'Your browser could not read this link. It may be offline, or the host may not allow websites to play it. Ask your streaming provider about "CORS".' }
+  }
+}
+
+function StreamTest({ url }) {
+  const [r, setR] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const run = async () => { setBusy(true); setR(await testStream(url)); setBusy(false) }
+  return (
+    <div className="streamtest">
+      <button type="button" className="btn ghost" onClick={run} disabled={!url || busy}>{busy ? 'Testing...' : 'Test this stream'}</button>
+      {r && <p className={r.ok ? 'ok' : 'error'}>{r.message}</p>}
+    </div>
+  )
+}
+
+function GoingLiveGuide() {
+  return (
+    <details className="guide">
+      <summary>How to run a live channel</summary>
+      <h3>Two kinds of channel</h3>
+      <ul>
+        <li><strong>Replay channel:</strong> a playlist of recorded films that plays on a loop. Paste its stream link, tick "Show as a 24/7 replay channel", and you are done.</li>
+        <li><strong>Live event:</strong> you broadcast from a camera or a computer to a live streaming service. The service gives you two things: a <em>stream address and key</em> to type into your broadcast software, and a <em>playback link</em> ending in .m3u8 to paste here.</li>
+      </ul>
+      <h3>Going live, step by step</h3>
+      <ol>
+        <li>Pick a live streaming service (ask Festaview for current recommendations) and create a live stream there.</li>
+        <li>Copy its playback link (.m3u8) into this channel and press <strong>Test this stream</strong>.</li>
+        <li>In OBS Studio (free) go to Settings, Stream, and enter the service's address and your stream key. Keep the key private.</li>
+        <li>Use the settings below, start a private test broadcast, then check it plays on your festival page.</li>
+        <li>When you are ready, press Start Streaming in OBS and tick <strong>Live right now</strong> here. Untick it when you finish.</li>
+      </ol>
+      <h3>Recommended OBS settings</h3>
+      <ul>
+        <li>Resolution 1920x1080 (or 1280x720 if your internet upload is weak), 30 frames per second.</li>
+        <li>Video bitrate 4500 to 6000 kbps. Your upload speed should be at least double that.</li>
+        <li>Keyframe interval: 2 seconds. Audio: AAC, 128 to 160 kbps, 48 kHz.</li>
+        <li>Use a wired internet connection and run a full test broadcast the day before.</li>
+      </ul>
+      <p className="note small">Live video is delayed by roughly 10 to 30 seconds, which is normal for streaming to TVs and browsers.</p>
+    </details>
   )
 }
 

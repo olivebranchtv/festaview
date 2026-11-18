@@ -313,3 +313,12 @@ button.live-card.playable:hover { transform: translateY(-3px); }
 .fp [id] { scroll-margin-top: 130px; }
 .fp-nav { padding-left: max(16px, calc((100% - 1152px) / 2 + 8px)); padding-right: max(16px, calc((100% - 1152px) / 2 + 8px)); }
 .fp-nav a { margin-left: auto; }
+
+/* live channel guide and stream test */
+.guide { background: #10101a; border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; }
+.guide summary { cursor: pointer; font-weight: 600; }
+.guide h3 { margin: 16px 0 6px; font-size: 15px; color: var(--gold); }
+.guide ul, .guide ol { margin: 6px 0; padding-left: 22px; color: #d6d6e0; }
+.guide li { margin: 4px 0; }
+.streamtest { margin: -4px 0 14px; }
+.streamtest p { margin: 8px 0 0; font-size: 14px; }
