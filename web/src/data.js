@@ -4,11 +4,13 @@ const url = import.meta.env.VITE_SUPABASE_URL
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY
 export const supabase = url && key ? createClient(url, key) : null
 
+const inHours = (h) => new Date(Date.now() + h * 3600e3).toISOString()
+
 // Demo content shown until a Supabase project is connected.
 const DEMO = {
   demo: true,
   festivals: [
-    { id: 'f1', slug: 'harborlight', name: 'Harborlight Film Festival', tagline: 'Stories from the coast', brand_color: '#3FA7D6' },
+    { id: 'f1', slug: 'harborlight', name: 'Harborlight Film Festival', tagline: 'Stories from the coast', brand_color: '#3FA7D6', voting_open: true },
     { id: 'f2', slug: 'nightowl', name: 'Night Owl Horror Fest', tagline: 'Best watched after dark', brand_color: '#D64545' },
     { id: 'f3', slug: 'shortcut', name: 'Shortcut Shorts Festival', tagline: 'Big stories, small runtimes', brand_color: '#E6B34A' },
   ],
@@ -24,16 +26,49 @@ const DEMO = {
     { id: 'l1', festival_id: 'f1', name: 'Harborlight Live', is_live: true },
     { id: 'l2', festival_id: 'f2', name: 'Night Owl Replay Channel', is_live: false, is_replay_loop: true },
   ],
+  schedule: [
+    { id: 's1', live_feed_id: 'l1', film_id: 'm1', title: null, starts_at: inHours(2), ends_at: inHours(3) },
+    { id: 's2', live_feed_id: 'l1', film_id: 'm2', title: 'Q&A with the director', starts_at: inHours(26), ends_at: inHours(27) },
+    { id: 's3', live_feed_id: 'l2', film_id: 'm3', title: null, starts_at: inHours(5), ends_at: inHours(6) },
+  ],
 }
 
 // Flat queries merged in JS (PostgREST FK joins are unreliable on this stack).
 export async function loadData() {
   if (!supabase) return DEMO
-  const [f, m, l] = await Promise.all([
+  const [f, m, l, s] = await Promise.all([
     supabase.from('festivals').select('*').eq('status', 'published').order('sort_order').order('name'),
     supabase.from('films').select('*').eq('status', 'published').order('created_at', { ascending: false }),
     supabase.from('live_feeds').select('*'),
+    supabase.from('schedule_items').select('*').gte('ends_at', new Date().toISOString()).order('starts_at').limit(200),
   ])
   if (f.error) throw f.error
-  return { demo: false, festivals: f.data || [], films: m.data || [], feeds: l.data || [] }
+  return { demo: false, festivals: f.data || [], films: m.data || [], feeds: l.data || [], schedule: s.data || [] }
+}
+
+// ---- anonymous visitor actions ----
+export function deviceId() {
+  try {
+    let d = localStorage.getItem('fv_device')
+    if (!d) { d = crypto.randomUUID(); localStorage.setItem('fv_device', d) }
+    return d
+  } catch { return 'anon' }
+}
+
+export async function logView(ev) {
+  if (!supabase) return
+  try { await supabase.from('view_events').insert({ ...ev, device_id: deviceId() }) } catch { /* analytics must never break playback */ }
+}
+
+export async function castVote(film) {
+  if (!supabase) return { ok: true }
+  const r = await supabase.from('film_votes').insert({ film_id: film.id, festival_id: film.festival_id, device_id: deviceId() })
+  if (r.error) return { ok: false, duplicate: r.error.code === '23505', message: r.error.message }
+  return { ok: true }
+}
+
+export async function submitInquiry(i) {
+  if (!supabase) return { ok: true }
+  const r = await supabase.from('inquiries').insert(i)
+  return r.error ? { ok: false, message: r.error.message } : { ok: true }
 }

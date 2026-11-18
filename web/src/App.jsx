@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react'
-import { loadData } from './data.js'
-import Admin from './Admin.jsx'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { loadData, castVote, submitInquiry } from './data.js'
+
+// Loaded on demand so the public home page stays light (video player, admin and owner console are separate chunks).
+const Admin = lazy(() => import('./Admin.jsx'))
+const Network = lazy(() => import('./Network.jsx'))
+const Player = lazy(() => import('./Player.jsx'))
 import { CONTACT_EMAIL, ROKU_URL } from './config.js'
 
 function useHashRoute() {
@@ -38,6 +42,68 @@ function FilmCard({ film, festival, onOpen }) {
   )
 }
 
+function VoteButton({ film }) {
+  const key = 'fv_voted'
+  const read = () => { try { return JSON.parse(localStorage.getItem(key)) || [] } catch { return [] } }
+  const [state, setState] = useState(read().includes(film.id) ? 'done' : 'idle')
+  const [msg, setMsg] = useState('')
+  const vote = async () => {
+    setState('busy')
+    const r = await castVote(film)
+    if (r.ok || r.duplicate) {
+      try { localStorage.setItem(key, JSON.stringify([...read(), film.id])) } catch { /* ignore */ }
+      setState('done')
+      setMsg(r.duplicate ? 'You already voted for this film.' : 'Thanks for voting.')
+    } else {
+      setState('idle')
+      setMsg('Voting is not available right now.')
+    }
+  }
+  return (
+    <span className="vote">
+      <button className="btn ghost" onClick={vote} disabled={state !== 'idle'}>
+        {state === 'done' ? 'Voted' : 'Vote Audience Choice'}
+      </button>
+      {msg && <small className="note">{msg}</small>}
+    </span>
+  )
+}
+
+function fmtWhen(iso) {
+  try {
+    return new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  } catch { return iso }
+}
+
+function InquiryForm() {
+  const [f, setF] = useState({ festival_name: '', contact_name: '', email: '', message: '' })
+  const [state, setState] = useState('idle')
+  const [err, setErr] = useState('')
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+  const submit = async (e) => {
+    e.preventDefault()
+    setState('busy'); setErr('')
+    const r = await submitInquiry({ ...f, contact_name: f.contact_name || null, message: f.message || null })
+    if (r.ok) setState('done'); else { setState('idle'); setErr('Could not send. Please email us at ' + CONTACT_EMAIL) }
+  }
+  if (state === 'done') {
+    return <div className="inquiry"><h3>Thank you</h3><p className="note">We received your details and will be in touch soon.</p></div>
+  }
+  return (
+    <form className="inquiry" onSubmit={submit}>
+      <h3>Become a founding festival</h3>
+      <div className="two">
+        <label className="field"><span>Festival name</span><input value={f.festival_name} onChange={set('festival_name')} required maxLength={200} /></label>
+        <label className="field"><span>Your name</span><input value={f.contact_name} onChange={set('contact_name')} maxLength={200} /></label>
+      </div>
+      <label className="field"><span>Email</span><input type="email" value={f.email} onChange={set('email')} required maxLength={200} /></label>
+      <label className="field"><span>Tell us about your festival</span><textarea rows={4} value={f.message} onChange={set('message')} maxLength={4000} /></label>
+      {err && <p className="error">{err}</p>}
+      <button className="btn" type="submit" disabled={state === 'busy'}>{state === 'busy' ? 'Sending...' : 'Send'}</button>
+    </form>
+  )
+}
+
 function FilmModal({ film, festival, onClose }) {
   useEffect(() => {
     const on = (e) => e.key === 'Escape' && onClose()
@@ -47,9 +113,13 @@ function FilmModal({ film, festival, onClose }) {
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={film.title}>
-        <div className="modal-art" style={film.poster_url ? undefined : bg(festival && festival.brand_color)}>
-          {film.poster_url && <img src={film.poster_url} alt="" />}
-        </div>
+        {film.video_url ? (
+          <Suspense fallback={<div className="modal-art" />}><Player film={film} /></Suspense>
+        ) : (
+          <div className="modal-art" style={film.poster_url ? undefined : bg(festival && festival.brand_color)}>
+            {film.poster_url && <img src={film.poster_url} alt="" />}
+          </div>
+        )}
         <div className="modal-body">
           <button className="close" onClick={onClose} aria-label="Close">Close</button>
           <h2>{film.title}</h2>
@@ -59,8 +129,11 @@ function FilmModal({ film, festival, onClose }) {
           {film.director && <p className="meta">Directed by {film.director}</p>}
           {festival && <p className="meta">Official Selection, {festival.name}</p>}
           <p>{film.synopsis || 'Synopsis coming soon.'}</p>
-          <div className="actions"><RokuButton /></div>
-          <p className="note small">Watch this film on the Festaview Roku channel. Web playback is coming.</p>
+          <div className="actions">
+            <RokuButton />
+            {festival && festival.voting_open && <VoteButton film={film} />}
+          </div>
+          <p className="note small">Also available on the Festaview Roku channel.</p>
         </div>
       </div>
     </div>
@@ -235,7 +308,7 @@ function Devices() {
 }
 
 function ForFestivals() {
-  const subject = encodeURIComponent('Founding festival: my festival on Festaview')
+  const [showForm, setShowForm] = useState(false)
   const items = [
     ['Your own channel', 'A branded category, a live channel and a white-label website, all in sync.'],
     ['A shared audience', 'Viewers who come for one festival discover yours, and the reverse.'],
@@ -254,9 +327,10 @@ function ForFestivals() {
         ))}
       </div>
       <div className="actions">
-        <a className="btn" href={'mailto:' + CONTACT_EMAIL + '?subject=' + subject}>Become a founding festival</a>
+        <button className="btn" onClick={() => setShowForm(true)}>Become a founding festival</button>
         <a className="btn ghost" href="#/admin">Festival login</a>
       </div>
+      {showForm && <InquiryForm />}
     </section>
   )
 }
@@ -350,6 +424,29 @@ function Festival({ data, slug, onOpen }) {
           </div>
         </section>
       )}
+      {(() => {
+        const ids = feeds.map((l) => l.id)
+        const items = (data.schedule || []).filter((s) => ids.includes(s.live_feed_id))
+        if (!items.length) return null
+        return (
+          <section className="block">
+            <h2>Coming up</h2>
+            <ul className="schedule">
+              {items.map((s) => {
+                const film = data.films.find((x) => x.id === s.film_id)
+                const feed = feeds.find((l) => l.id === s.live_feed_id)
+                return (
+                  <li key={s.id}>
+                    <span className="when">{fmtWhen(s.starts_at)}</span>
+                    <strong>{s.title || (film && film.title) || 'To be announced'}</strong>
+                    {feed && <small>{feed.name}</small>}
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+      })()}
       <section className="block">
         <h2>Official Selection</h2>
         {films.length === 0 ? (
@@ -370,12 +467,16 @@ export default function App() {
   const [error, setError] = useState('')
   const [open, setOpen] = useState(null)
 
+  // Close any open film popup when the page changes.
+  useEffect(() => { setOpen(null) }, [hash])
+
   useEffect(() => {
     loadData().then(setData).catch((e) => setError(e.message || 'Failed to load'))
   }, [])
 
   const m = hash.match(/^#\/festival\/(.+)$/)
   const isAdmin = hash.startsWith('#/admin')
+  const isNetwork = hash.startsWith('#/network')
 
   const go = (id) => {
     const scroll = () => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }) }
@@ -389,13 +490,16 @@ export default function App() {
     <div className="app">
       <Header go={go} />
       <main>
-        {isAdmin && <div className="wrap-admin"><Admin /></div>}
-        {!isAdmin && error && <p className="note pad">{error}</p>}
-        {!isAdmin && !data && !error && <p className="note pad">Loading...</p>}
-        {!isAdmin && data && data.demo && <p className="banner">Demo content. Connect Supabase to show real festivals.</p>}
-        {!isAdmin && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} /> : <Hub data={data} go={go} onOpen={openFilm} />)}
+        <Suspense fallback={<p className="note pad">Loading...</p>}>
+          {isAdmin && <div className="wrap-admin"><Admin /></div>}
+          {isNetwork && <div className="wrap-admin"><Network /></div>}
+        </Suspense>
+        {!isAdmin && !isNetwork && error && <p className="note pad">{error}</p>}
+        {!isAdmin && !isNetwork && !data && !error && <p className="note pad">Loading...</p>}
+        {!isAdmin && !isNetwork && data && data.demo && <p className="banner">Demo content. Connect Supabase to show real festivals.</p>}
+        {!isAdmin && !isNetwork && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} /> : <Hub data={data} go={go} onOpen={openFilm} />)}
       </main>
-      {!isAdmin && <Footer />}
+      {!isAdmin && !isNetwork && <Footer />}
       {open && <FilmModal film={open} festival={openFest} onClose={() => setOpen(null)} />}
     </div>
   )

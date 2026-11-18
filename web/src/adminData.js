@@ -133,3 +133,97 @@ export async function uploadImage(fid, file) {
   if (up.error) throw up.error
   return supabase.storage.from('festival-media').getPublicUrl(path).data.publicUrl
 }
+
+// ---- account creation ----
+export async function signUp(email, password) {
+  if (isDemo) throw new Error('Sign-up needs a connected database.')
+  const { error } = await supabase.auth.signUp({ email, password })
+  if (error) throw error
+}
+
+// ---- live schedule ----
+export async function listSchedule(feedId) {
+  if (isDemo) return (load().schedule || []).filter((s) => s.live_feed_id === feedId)
+  const r = await supabase.from('schedule_items').select('*').eq('live_feed_id', feedId).order('starts_at')
+  if (r.error) throw r.error
+  return r.data
+}
+export async function saveSchedule(item) {
+  if (isDemo) {
+    const s = load(); s.schedule = s.schedule || []
+    s.schedule.push({ ...item, id: uid() }); persist(s); return
+  }
+  const r = await supabase.from('schedule_items').insert(clean(item))
+  if (r.error) throw r.error
+}
+export async function deleteSchedule(id) {
+  if (isDemo) { const s = load(); s.schedule = (s.schedule || []).filter((x) => x.id !== id); persist(s); return }
+  const r = await supabase.from('schedule_items').delete().eq('id', id)
+  if (r.error) throw r.error
+}
+
+// ---- analytics, votes, filmmaker shares ----
+export async function filmStats(fid, days) {
+  if (isDemo) return []
+  const since = new Date(Date.now() - days * 864e5).toISOString()
+  const r = await supabase.rpc('festival_film_stats', { p_festival: fid, p_since: since })
+  if (r.error) throw r.error
+  return r.data || []
+}
+export async function voteCounts(fid) {
+  if (isDemo) return {}
+  const r = await supabase.from('film_votes').select('film_id').eq('festival_id', fid)
+  if (r.error) throw r.error
+  const out = {}
+  for (const v of r.data || []) out[v.film_id] = (out[v.film_id] || 0) + 1
+  return out
+}
+export async function listShares(filmIds) {
+  if (isDemo) return (load().shares || []).filter((s) => filmIds.includes(s.film_id))
+  if (!filmIds.length) return []
+  const r = await supabase.from('filmmaker_shares').select('*').in('film_id', filmIds)
+  if (r.error) throw r.error
+  return r.data
+}
+export async function saveShare(share) {
+  if (isDemo) { const s = load(); s.shares = s.shares || []; s.shares.push({ ...share, id: uid() }); persist(s); return }
+  const r = await supabase.from('filmmaker_shares').insert(clean(share))
+  if (r.error) throw r.error
+}
+export async function deleteShare(id) {
+  if (isDemo) { const s = load(); s.shares = (s.shares || []).filter((x) => x.id !== id); persist(s); return }
+  const r = await supabase.from('filmmaker_shares').delete().eq('id', id)
+  if (r.error) throw r.error
+}
+
+// ---- network owner console ----
+export async function isPlatformAdmin() {
+  if (isDemo) return false
+  const { data: u } = await supabase.auth.getUser()
+  if (!u || !u.user) return false
+  const r = await supabase.from('platform_admins').select('user_id').eq('user_id', u.user.id)
+  return !r.error && (r.data || []).length > 0
+}
+export async function allFestivals() {
+  const r = await supabase.from('festivals').select('*').order('created_at', { ascending: false })
+  if (r.error) throw r.error
+  return r.data
+}
+export async function createFestival({ slug, name }) {
+  const r = await supabase.from('festivals').insert({ slug, name, status: 'draft' })
+  if (r.error) throw r.error
+}
+export async function setFestivalStatus(id, status) {
+  const r = await supabase.from('festivals').update({ status }).eq('id', id)
+  if (r.error) throw r.error
+}
+export async function assignAdmin(email, festivalId) {
+  const r = await supabase.rpc('assign_festival_admin', { p_email: email, p_festival: festivalId })
+  if (r.error) throw r.error
+  return r.data
+}
+export async function listInquiries() {
+  const r = await supabase.from('inquiries').select('*').order('created_at', { ascending: false }).limit(100)
+  if (r.error) throw r.error
+  return r.data
+}

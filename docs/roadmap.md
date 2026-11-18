@@ -16,3 +16,19 @@
 | 12 | Distributor/industry portal | High | Medium-High | 3 |
 | 13 | Audience voting by QR code | Low | Medium | 3 |
 | 14 | Fire TV, Android TV, Samsung, LG | High | Medium | 3 |
+
+## Status (2026-11-18)
+
+Built: hub + festival pages, festival admin (films, live channels, schedule editor, festival page, filmmaker
+shares, analytics + payout estimate + CSV), web playback (HLS via hls.js, captions), audience voting,
+availability windows (hidden outside window via RLS), founding-festival inquiry form, network owner console
+(#/network: create/publish festivals, link admins, read inquiries), festival account sign-up.
+
+Not built (needs external accounts or larger work):
+- Ads / Adtelligent revenue reporting (copy proven RAF task unmodified; real impressions then feed view_events)
+- True live ingest (provider TBD; Bunny live support unverified)
+- Direct upload to Bunny Stream (needs server-side function + Bunny API key)
+- AI subtitles/translation (needs an AI/subtitle provider)
+- Jury/screener portal, distributor portal
+- Geo blocking (needs edge/CDN or Bunny token rules; not enforceable in the database)
+- Roku: sideload testing, icons/splash, channel publish; other TV platforms
