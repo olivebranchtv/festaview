@@ -2,3 +2,9 @@
   base = "web"
   command = "npm run build"
   publish = "dist"
+
+[build.environment]
+  # The Supabase URL and publishable key are public by design (row level security protects the data),
+  # so Netlify's secret scanner must not fail the build on them. NEVER add a secret/service_role key here.
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
+  SECRETS_SCAN_OMIT_PATHS = "roku/**"
