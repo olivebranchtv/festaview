@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadData } from './data.js'
+import Admin from './Admin.jsx'
 
 function useHashRoute() {
   const [hash, setHash] = useState(window.location.hash || '#/')
@@ -123,18 +124,21 @@ export default function App() {
   }, [])
 
   const m = hash.match(/^#\/festival\/(.+)$/)
+  const isAdmin = hash.startsWith('#/admin')
 
   return (
     <div className="app">
       <header className="top">
         <a href="#/" className="brand">FESTAVIEW</a>
         <span className="tag">Every festival. Every screen.</span>
+        <a className="admin-link" href="#/admin">Festival login</a>
       </header>
       <main>
-        {error && <p className="note">{error}</p>}
-        {!data && !error && <p className="note">Loading...</p>}
-        {data && data.demo && <p className="banner">Demo content. Connect Supabase (see web/.env.example) to show real festivals.</p>}
-        {data && (m ? <Festival data={data} slug={m[1]} /> : <Hub data={data} />)}
+        {isAdmin && <Admin />}
+        {!isAdmin && error && <p className="note">{error}</p>}
+        {!isAdmin && !data && !error && <p className="note">Loading...</p>}
+        {!isAdmin && data && data.demo && <p className="banner">Demo content. Connect Supabase (see web/.env.example) to show real festivals.</p>}
+        {!isAdmin && data && (m ? <Festival data={data} slug={m[1]} /> : <Hub data={data} />)}
       </main>
     </div>
   )

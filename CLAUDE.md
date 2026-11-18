@@ -4,7 +4,8 @@ White-label streaming network for film festivals. One huge Roku hub channel (Fes
 festival has its own branded category, its own live-feed channel, and a synced white-label website.
 
 Tagline: "Every festival. Every screen."
-Domain target: festaview.com (free as of 2026-11-18; also check .tv/.app, socials, USPTO).
+Domain: festaview.com, registered 2026-11-18 via Namecheap (by Sherri). Still to check: .tv/.app, social handles, USPTO.
+(feataview.com is NOT the brand; it was a typo and is unregistered.)
 
 ## Business model
 - Ads via Adtelligent on Roku (RAF). Festival gets 80% of ad revenue attributed to its content/live feed;
