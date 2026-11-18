@@ -127,7 +127,7 @@ function FilmsTab({ festival, setMsg }) {
           <Field label="Rating"><input value={edit.rating || ''} onChange={(e) => set('rating')(e.target.value)} placeholder="G, PG, PG-13, R" /></Field>
         </div>
         <ImageField label="Poster (16:9 works best on Roku)" value={edit.poster_url} onChange={set('poster_url')} festivalId={festival.id} onError={(m) => setMsg(m, true)} />
-        <Field label="Video URL" hint="Direct link to an HLS (.m3u8) or MP4 file. Roku plays these formats.">
+        <Field label="Video URL" hint="Direct link to an HLS (.m3u8) or MP4 file. Roku plays these formats. Recommended host: Bunny Stream (bunny.net). Upload your film there and paste its HLS playlist link here.">
           <input value={edit.video_url || ''} onChange={(e) => set('video_url')(e.target.value)} placeholder="https://.../film.m3u8" />
         </Field>
         <Field label="Trailer URL"><input value={edit.trailer_url || ''} onChange={(e) => set('trailer_url')(e.target.value)} /></Field>
