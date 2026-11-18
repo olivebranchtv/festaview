@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+  <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+  <children>
+    <Rectangle width="1280" height="720" color="0x0B0B12FF" />
+    <Label id="brand" text="FESTAVIEW" translation="[60,28]" width="600" height="48" color="0xE6B34AFF" />
+    <Label id="tagline" text="Every festival. Every screen." translation="[60,74]" width="700" height="28" color="0xAAAAAAFF" />
+    <RowList
+      id="rows"
+      translation="[40,130]"
+      itemComponentName="PosterItem"
+      itemSize="[1200,200]"
+      rowItemSize="[[256,180]]"
+      rowItemSpacing="[[16,0]]"
+      numRows="3"
+      rowLabelOffset="[[20,10]]"
+      showRowLabel="[true]"
+      focusXOffset="[20]"
+      rowFocusAnimationStyle="floatingFocus"
+      visible="false" />
+    <Label id="status" text="Loading festivals..." translation="[60,340]" width="1100" height="40" color="0xFFFFFFFF" />
+    <Video id="player" width="1280" height="720" visible="false" />
+  </children>
+</component>
