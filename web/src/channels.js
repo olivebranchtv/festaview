@@ -7,29 +7,18 @@ export const durationOf = (f) => {
   return 0
 }
 
-// Small deterministic random generator so a "shuffle" channel has the same order for every viewer.
-function seeded(str) {
-  let h = 1779033703 ^ str.length
-  for (let i = 0; i < str.length; i++) {
-    h = Math.imul(h ^ str.charCodeAt(i), 3432918353)
-    h = (h << 13) | (h >>> 19)
-  }
-  return () => {
-    h = Math.imul(h ^ (h >>> 16), 2246822507)
-    h = Math.imul(h ^ (h >>> 13), 3266489909)
-    h ^= h >>> 16
-    return (h >>> 0) / 4294967296
-  }
+// Deterministic shuffle: a simple hash that the Roku app reproduces exactly, so every device agrees on the order.
+function hashKey(str) {
+  let h = 7
+  for (let i = 0; i < str.length; i++) h = (h * 131 + str.charCodeAt(i)) % 1000003
+  return h
 }
 
 function shuffle(list, seed) {
-  const rand = seeded(seed)
-  const a = list.slice()
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
+  return list
+    .map((f, i) => ({ f, k: hashKey(seed + ":" + f.id) * 1000 + i }))
+    .sort((x, y) => x.k - y.k)
+    .map((x) => x.f)
 }
 
 function arrange(films, order, seed) {

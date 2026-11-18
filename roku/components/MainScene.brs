@@ -8,6 +8,9 @@ sub init()
   m.player = m.top.findNode("player")
   m.rows.observeField("rowItemSelected", "onItemSelected")
   m.player.observeField("state", "onPlayerState")
+  m.channels = []
+  m.guideRow = -1
+  m.nowChannel = invalid
 
   m.feedTask = CreateObject("roSGNode", "FeedTask")
   m.feedTask.observeField("result", "onFeedResult")
@@ -22,6 +25,23 @@ end sub
 sub onFeedResult()
   data = m.feedTask.result
   root = CreateObject("roSGNode", "ContentNode")
+
+  ' TV Guide row: automatic festival channels (scheduled playback, same film for everyone at the same time)
+  m.channels = buildChannels(data)
+  m.guideRow = -1
+  if m.channels.Count() > 0 then
+    guide = root.CreateChild("ContentNode")
+    guide.title = "TV Guide"
+    m.guideRow = 0
+    for each ch in m.channels
+      n = channelNow(ch)
+      cur = ch.items[n.index]
+      gitem = guide.CreateChild("ContentNode")
+      gitem.title = "Ch " + StrI(ch.number) + "  " + ch.name
+      gitem.description = cur.title
+      gitem.hdPosterUrl = cur.poster
+    end for
+  end if
 
   ' Live Now row
   live = []
@@ -72,20 +92,70 @@ end sub
 
 sub onItemSelected()
   idx = m.rows.rowItemSelected
+  if idx[0] = m.guideRow then
+    ch = m.channels[idx[1]]
+    n = channelNow(ch)
+    startChannelItem(ch, n.index, n.offset)
+    return
+  end if
   item = m.rows.content.GetChild(idx[0]).GetChild(idx[1])
   if item.url = "" then return
+  m.nowChannel = invalid
   m.player.content = item
   m.player.visible = true
   m.player.setFocus(true)
   m.player.control = "play"
 end sub
 
+' Plays one film of a channel, starting offset seconds in.
+sub startChannelItem(ch as object, index as integer, offset as integer)
+  it = ch.items[index]
+  c = CreateObject("roSGNode", "ContentNode")
+  c.url = it.url
+  c.streamFormat = it.format
+  c.title = it.title
+  c.PlayStart = offset
+  m.nowChannel = { id: ch.id, index: index }
+  m.player.control = "stop"
+  m.player.content = c
+  m.player.visible = true
+  m.player.setFocus(true)
+  m.player.control = "play"
+end sub
+
+' A film on a channel ended: follow the clock to whatever is on next.
+sub advanceChannel()
+  ch = invalid
+  for each c in m.channels
+    if c.id = m.nowChannel.id then ch = c
+  end for
+  if ch = invalid then
+    closePlayer()
+    return
+  end if
+  n = channelNow(ch)
+  if n.index = m.nowChannel.index then
+    startChannelItem(ch, (n.index + 1) MOD ch.items.Count(), 0)
+  else
+    startChannelItem(ch, n.index, n.offset)
+  end if
+end sub
+
 sub onPlayerState()
   s = m.player.state
-  if s = "finished" or s = "error" then closePlayer()
+  if s = "finished" then
+    if m.nowChannel <> invalid then
+      advanceChannel()
+    else
+      closePlayer()
+    end if
+  else if s = "error" then
+    closePlayer()
+  end if
 end sub
 
 sub closePlayer()
+  m.nowChannel = invalid
   m.player.control = "stop"
   m.player.visible = false
   m.rows.setFocus(true)
