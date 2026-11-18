@@ -50,3 +50,12 @@ create policy "admin delete festival media" on storage.objects for delete to aut
 
 -- To give someone access (run as the project owner):
 -- insert into festival_admins (user_id, festival_id) values ('<auth user uuid>', '<festival uuid>');
+
+-- Table privileges (this Supabase project does not auto-grant them to the API roles)
+grant usage on schema public to anon, authenticated;
+grant select on festivals, films, live_feeds, schedule_items to anon;
+grant insert on view_events to anon;
+grant usage, select on all sequences in schema public to anon, authenticated;
+grant select, insert, update, delete on festivals, films, live_feeds, schedule_items, filmmaker_shares to authenticated;
+grant select on festival_admins to authenticated;
+grant select, insert on view_events to authenticated;
