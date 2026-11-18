@@ -82,6 +82,7 @@ function FestivalTab({ festival, onSaved, setMsg }) {
       const saved = await api.saveFestival({
         id: f.id, name: f.name, tagline: f.tagline, description: f.description, brand_color: f.brand_color,
         website: f.website, logo_url: f.logo_url, banner_url: f.banner_url, status: f.status, voting_open: !!f.voting_open,
+        location: f.location, starts_on: f.starts_on, ends_on: f.ends_on, passes_url: f.passes_url,
       })
       onSaved(saved); setMsg('Festival saved.')
     } catch (x) { setMsg(x.message, true) }
@@ -92,6 +93,12 @@ function FestivalTab({ festival, onSaved, setMsg }) {
       <Field label="Tagline"><input value={f.tagline || ''} onChange={(e) => set('tagline')(e.target.value)} /></Field>
       <Field label="Description"><textarea rows={4} value={f.description || ''} onChange={(e) => set('description')(e.target.value)} /></Field>
       <Field label="Website"><input value={f.website || ''} onChange={(e) => set('website')(e.target.value)} placeholder="https://" /></Field>
+      <div className="two">
+        <Field label="Location"><input value={f.location || ''} onChange={(e) => set('location')(e.target.value)} placeholder="City, State or Country" /></Field>
+        <Field label="Passes or tickets link"><input value={f.passes_url || ''} onChange={(e) => set('passes_url')(e.target.value)} placeholder="https://" /></Field>
+        <Field label="Starts"><input type="date" value={f.starts_on || ''} onChange={(e) => set('starts_on')(e.target.value)} /></Field>
+        <Field label="Ends"><input type="date" value={f.ends_on || ''} onChange={(e) => set('ends_on')(e.target.value)} /></Field>
+      </div>
       <Field label="Brand color"><input type="color" value={f.brand_color || '#E6B34A'} onChange={(e) => set('brand_color')(e.target.value)} /></Field>
       <ImageField label="Logo" value={f.logo_url} onChange={set('logo_url')} festivalId={f.id} onError={(m) => setMsg(m, true)} />
       <ImageField label="Banner" value={f.banner_url} onChange={set('banner_url')} festivalId={f.id} onError={(m) => setMsg(m, true)} />

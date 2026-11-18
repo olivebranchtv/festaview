@@ -105,8 +105,8 @@ function InquiryForm() {
   )
 }
 
-function FilmModal({ film, festival, onClose }) {
-  const [mode, setMode] = useState('film')
+function FilmModal({ film, festival, onClose, startMode }) {
+  const [mode, setMode] = useState(startMode || 'film')
   useEffect(() => {
     const on = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', on)
@@ -126,7 +126,7 @@ function FilmModal({ film, festival, onClose }) {
             <Suspense fallback={<div className="modal-art" />}>
               {mode === 'trailer' || !film.video_url
                 ? <Player key="trailer" film={{ ...film, video_url: film.trailer_url, captions_url: null }} track={false} />
-                : <Player key="film" film={film} />}
+                : <Player key="film" film={film} track={!film.live} />}
             </Suspense>
           </>
         ) : (
@@ -145,7 +145,7 @@ function FilmModal({ film, festival, onClose }) {
           <p>{film.synopsis || 'Synopsis coming soon.'}</p>
           <div className="actions">
             <RokuButton />
-            {festival && festival.voting_open && <VoteButton film={film} />}
+            {festival && festival.voting_open && !film.live && <VoteButton film={film} />}
           </div>
           <p className="note small">Also available on the Festaview Roku channel.</p>
         </div>
@@ -454,76 +454,186 @@ function TheaterScreenings({ fest, data }) {
   )
 }
 
+function accentText(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '')
+  if (!m) return '#14110a'
+  const n = parseInt(m[1], 16)
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  return lum > 0.6 ? '#14110a' : '#ffffff'
+}
+
+function fmtDates(a, b) {
+  if (!a) return ''
+  const d1 = new Date(a + 'T12:00:00')
+  const d2 = b ? new Date(b + 'T12:00:00') : null
+  const md = { month: 'long', day: 'numeric' }
+  if (!d2 || +d1 === +d2) return d1.toLocaleDateString(undefined, { ...md, year: 'numeric' })
+  const same = d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear()
+  return d1.toLocaleDateString(undefined, md) + ' - ' + (same ? d2.getDate() : d2.toLocaleDateString(undefined, md)) + ', ' + d2.getFullYear()
+}
+
+// A festival's own landing page: branded hero, spotlight film, about, live, schedule, theaters and the full selection.
 function Festival({ data, slug, onOpen }) {
+  const [genre, setGenre] = useState('')
+  const [q, setQ] = useState('')
   const fest = data.festivals.find((f) => f.slug === slug)
   if (!fest) return <section className="block"><p className="note">Festival not found. <a href="#/">Back to all festivals</a></p></section>
+
   const films = data.films.filter((m) => m.festival_id === fest.id)
   const feeds = data.feeds.filter((l) => l.festival_id === fest.id)
+  const venues = (data.venues || []).filter((v) => v.festival_id === fest.id)
+  const theaterShows = (data.screenings || []).filter((s) => s.festival_id === fest.id)
+  const feedIds = feeds.map((l) => l.id)
+  const sched = (data.schedule || []).filter((s) => feedIds.includes(s.live_feed_id))
+  const accent = fest.brand_color || '#E6B34A'
+  const featured = films.find((m) => m.poster_url) || films[0]
+  const backdrop = fest.banner_url || (featured && featured.poster_url) || ''
+  const genres = [...new Set(films.map((m) => m.genre).filter(Boolean))]
+  const shown = films.filter((m) => (!genre || m.genre === genre) && (!q || (m.title + ' ' + (m.director || '')).toLowerCase().includes(q.toLowerCase())))
+  const totalMin = films.reduce((a, m) => a + (Number(m.runtime_min) || 0), 0)
+  const dates = fmtDates(fest.starts_on, fest.ends_on)
+  const to = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  const nav = [['about', 'About'], films.length ? ['selection', 'Films'] : null, feeds.length ? ['live', 'Live'] : null, sched.length ? ['schedule', 'Schedule'] : null, theaterShows.length ? ['theaters', 'In theaters'] : null].filter(Boolean)
+  const meta = (m) => [m.year, m.runtime_min ? m.runtime_min + ' min' : null, m.genre, m.rating].filter(Boolean).join('  |  ')
+
   return (
-    <>
-      <section className="fest-hero" style={fest.banner_url ? { backgroundImage: 'linear-gradient(0deg, #0b0b12 5%, rgba(11,11,18,.4)), url(' + fest.banner_url + ')' } : bg(fest.brand_color)}>
-        <div className="hero-inner">
+    <div className="fp" style={{ '--accent': accent, '--gold': accent, '--accent-text': accentText(accent) }}>
+      <section className="fp-hero">
+        <div className="fp-backdrop" style={backdrop ? { backgroundImage: 'url(' + backdrop + ')' } : bg(accent)} />
+        <div className="fp-shade" />
+        <div className="fp-hero-inner">
           <a className="back" href="#/">All festivals</a>
           {fest.logo_url && <img className="fest-logo" src={fest.logo_url} alt="" />}
+          {(dates || fest.location) && <p className="eyebrow">{[dates, fest.location].filter(Boolean).join('   |   ')}</p>}
           <h1>{fest.name}</h1>
           {fest.tagline && <p className="lede">{fest.tagline}</p>}
           <div className="actions">
-            <RokuButton />
-            {fest.website && <a className="btn ghost" href={fest.website} target="_blank" rel="noreferrer">Festival website</a>}
+            {featured && featured.video_url && <button className="btn" onClick={() => onOpen(featured)}>Watch now</button>}
+            {featured && !featured.video_url && <button className="btn" onClick={() => to('selection')}>See the films</button>}
+            {fest.passes_url && <a className="btn ghost" href={fest.passes_url} target="_blank" rel="noreferrer">Get passes</a>}
+            <RokuButton className="ghost" />
           </div>
+          <ul className="stats">
+            <li><strong>{films.length}</strong><span>{films.length === 1 ? 'film' : 'films'}</span></li>
+            {totalMin > 0 && <li><strong>{totalMin >= 120 ? Math.round(totalMin / 60) : totalMin}</strong><span>{totalMin >= 120 ? 'hours of film' : 'minutes of film'}</span></li>}
+            {feeds.length > 0 && <li><strong>{feeds.length}</strong><span>live {feeds.length === 1 ? 'channel' : 'channels'}</span></li>}
+            {venues.length > 0 && <li><strong>{venues.length}</strong><span>{venues.length === 1 ? 'theater' : 'theaters'}</span></li>}
+          </ul>
         </div>
       </section>
-      {fest.description && (
-        <section className="block"><h2>About</h2><p className="lede">{fest.description}</p></section>
+
+      <nav className="fp-nav" aria-label="Festival sections">
+        {nav.map(([id, label]) => <button key={id} onClick={() => to(id)}>{label}</button>)}
+        {fest.passes_url && <a href={fest.passes_url} target="_blank" rel="noreferrer">Passes</a>}
+      </nav>
+
+      {featured && (
+        <section className="block fp-spot">
+          <div className="spot-art">
+            {featured.poster_url ? <img src={featured.poster_url} alt="" /> : <div className="spot-fallback" style={bg(accent)}>{featured.title}</div>}
+          </div>
+          <div className="spot-copy">
+            <p className="eyebrow">Spotlight</p>
+            <h2>{featured.title}</h2>
+            {meta(featured) && <p className="meta">{meta(featured)}</p>}
+            {featured.director && <p className="meta">Directed by {featured.director}</p>}
+            <p className="lede small">{featured.synopsis || 'An Official Selection of ' + fest.name + '.'}</p>
+            <div className="actions">
+              {featured.video_url && <button className="btn" onClick={() => onOpen(featured)}>Watch film</button>}
+              {featured.trailer_url && <button className="btn ghost" onClick={() => onOpen(featured, 'trailer')}>Watch trailer</button>}
+              {!featured.video_url && <button className="btn" onClick={() => onOpen(featured)}>Details</button>}
+            </div>
+          </div>
+        </section>
       )}
+
+      <section id="about" className="block fp-about">
+        <div>
+          <h2>About the festival</h2>
+          <p className="lede">{fest.description || fest.name + ' celebrates independent film. Browse the Official Selection, catch live events and find a screening near you.'}</p>
+        </div>
+        <dl className="facts">
+          {dates && <><dt>When</dt><dd>{dates}</dd></>}
+          {fest.location && <><dt>Where</dt><dd>{fest.location}</dd></>}
+          <dt>Films</dt><dd>{films.length}</dd>
+          {venues.length > 0 && <><dt>Theaters</dt><dd>{venues.map((v) => v.name).join(', ')}</dd></>}
+          {fest.website && <><dt>Website</dt><dd><a href={fest.website} target="_blank" rel="noreferrer">{fest.website.replace(/^https?:\/\//, '')}</a></dd></>}
+        </dl>
+      </section>
+
+      {films.length > 0 && (
+        <section id="selection" className="block">
+          <div className="fp-head">
+            <h2>Official Selection</h2>
+            <input className="fp-search" placeholder="Search films" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search films" />
+          </div>
+          {genres.length > 1 && (
+            <div className="chips">
+              <button className={'chip' + (!genre ? ' on' : '')} onClick={() => setGenre('')}>All</button>
+              {genres.map((g) => <button key={g} className={'chip' + (genre === g ? ' on' : '')} onClick={() => setGenre(g)}>{g}</button>)}
+            </div>
+          )}
+          {shown.length === 0 ? <p className="note">No films match.</p> : (
+            <div className="fp-grid">{shown.map((m) => <FilmCard key={m.id} film={m} festival={fest} onOpen={onOpen} />)}</div>
+          )}
+        </section>
+      )}
+
+      {films.length === 0 && (
+        <section className="block"><h2>Official Selection</h2><p className="note">This festival's films are coming soon.</p></section>
+      )}
+
       {feeds.length > 0 && (
-        <section className="block">
+        <section id="live" className="block">
           <h2>Live channel</h2>
           <div className="row">
             {feeds.map((l) => (
-              <div key={l.id} className="live-card" style={bg(fest.brand_color)}>
+              <button
+                key={l.id}
+                className={'live-card' + (l.stream_url ? ' playable' : '')}
+                style={l.poster_url ? { backgroundImage: 'linear-gradient(0deg, rgba(0,0,0,.75), rgba(0,0,0,.1)), url(' + l.poster_url + ')', backgroundSize: 'cover' } : bg(accent)}
+                onClick={() => l.stream_url && onOpen({ id: 'live-' + l.id, festival_id: l.festival_id, title: l.name, synopsis: l.is_live ? 'Live now on ' + fest.name + '.' : 'Always-on replay channel from ' + fest.name + '.', video_url: l.stream_url, poster_url: l.poster_url, live: true })}
+              >
                 <span className={'pill ' + (l.is_live ? 'live' : '')}>{l.is_live ? 'Live now' : 'Replay channel'}</span>
                 <strong>{l.name}</strong>
-              </div>
+                <small>{l.stream_url ? 'Click to watch' : 'Stream starts soon'}</small>
+              </button>
             ))}
           </div>
         </section>
       )}
-      {(() => {
-        const ids = feeds.map((l) => l.id)
-        const items = (data.schedule || []).filter((s) => ids.includes(s.live_feed_id))
-        if (!items.length) return null
-        return (
-          <section className="block">
-            <h2>Coming up</h2>
-            <ul className="schedule">
-              {items.map((s) => {
-                const film = data.films.find((x) => x.id === s.film_id)
-                const feed = feeds.find((l) => l.id === s.live_feed_id)
-                return (
-                  <li key={s.id}>
-                    <span className="when">{fmtWhen(s.starts_at)}</span>
-                    <strong>{s.title || (film && film.title) || 'To be announced'}</strong>
-                    {feed && <small>{feed.name}</small>}
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        )
-      })()}
-      <TheaterScreenings fest={fest} data={data} />
+
+      {sched.length > 0 && (
+        <section id="schedule" className="block">
+          <h2>Coming up</h2>
+          <ul className="schedule">
+            {sched.map((s) => {
+              const film = data.films.find((x) => x.id === s.film_id)
+              const feed = feeds.find((l) => l.id === s.live_feed_id)
+              return (
+                <li key={s.id}>
+                  <span className="when">{fmtWhen(s.starts_at)}</span>
+                  <strong>{s.title || (film && film.title) || 'To be announced'}</strong>
+                  {feed && <small>{feed.name}</small>}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+
+      <div id="theaters"><TheaterScreenings fest={fest} data={data} /></div>
+
       <section className="block">
-        <h2>Official Selection</h2>
-        {films.length === 0 ? (
-          <p className="note">This festival's films are coming soon.</p>
-        ) : (
-          <div className="row wrap">
-            {films.map((m) => <FilmCard key={m.id} film={m} festival={fest} onOpen={onOpen} />)}
+        <div className="fp-cta">
+          <div>
+            <h2>Watch {fest.name} on your TV</h2>
+            <p className="lede small">Stream the Official Selection and live events on the Festaview Roku channel.</p>
           </div>
-        )}
+          <RokuButton />
+        </div>
       </section>
-    </>
+    </div>
   )
 }
 
@@ -551,7 +661,8 @@ export default function App() {
     if (m || isAdmin) { window.location.hash = '#/'; setTimeout(scroll, 80) } else scroll()
   }
 
-  const openFilm = (film) => setOpen(film)
+  const [openMode, setOpenMode] = useState('film')
+  const openFilm = (film, mode) => { setOpenMode(mode || 'film'); setOpen(film) }
   const openFest = open && data ? data.festivals.find((f) => f.id === open.festival_id) : null
 
   return (
@@ -569,7 +680,7 @@ export default function App() {
         {isPublic && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} /> : <Hub data={data} go={go} onOpen={openFilm} />)}
       </main>
       {isPublic && <Footer />}
-      {open && <FilmModal film={open} festival={openFest} onClose={() => setOpen(null)} />}
+      {open && <FilmModal key={open.id + openMode} film={open} festival={openFest} startMode={openMode} onClose={() => setOpen(null)} />}
     </div>
   )
 }

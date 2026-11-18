@@ -10,7 +10,7 @@ const inHours = (h) => new Date(Date.now() + h * 3600e3).toISOString()
 const DEMO = {
   demo: true,
   festivals: [
-    { id: 'f1', slug: 'harborlight', name: 'Harborlight Film Festival', tagline: 'Stories from the coast', brand_color: '#3FA7D6', voting_open: true },
+    { id: 'f1', slug: 'harborlight', name: 'Harborlight Film Festival', tagline: 'Stories from the coast', brand_color: '#3FA7D6', voting_open: true, location: 'Portland, Oregon', starts_on: '2027-03-12', ends_on: '2027-03-16', passes_url: 'https://example.com/passes', description: 'Harborlight showcases independent stories from coastal communities around the world. Five days of features, shorts and documentaries, with live conversations and screenings across the city.' },
     { id: 'f2', slug: 'nightowl', name: 'Night Owl Horror Fest', tagline: 'Best watched after dark', brand_color: '#D64545' },
     { id: 'f3', slug: 'shortcut', name: 'Shortcut Shorts Festival', tagline: 'Big stories, small runtimes', brand_color: '#E6B34A' },
   ],
