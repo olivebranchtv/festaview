@@ -537,7 +537,7 @@ export default function App() {
   useEffect(() => { setOpen(null) }, [hash])
 
   useEffect(() => {
-    loadData().then(setData).catch((e) => setError(e.message || 'Failed to load'))
+    loadData().then(setData).catch(() => setError('Festaview is having trouble loading right now. Please refresh in a moment.'))
   }, [])
 
   const m = hash.match(/^#\/festival\/(.+)$/)
