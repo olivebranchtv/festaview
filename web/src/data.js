@@ -16,6 +16,13 @@ const DEMO = {
   ],
   films: [
     { id: 'm1', festival_id: 'f1', title: 'Salt and Rope', director: 'A. Moreno', runtime_min: 12, genre: 'Drama' },
+    {
+      id: 'm0', festival_id: 'f1', title: 'The Sparrows Nesting', director: '', runtime_min: 92,
+      synopsis: 'Sample film for testing playback.',
+      poster_url: 'https://vz-0bae8f18-f47.b-cdn.net/19a45b4e-db32-4c61-8d21-658bb69d9df4/thumbnail.jpg',
+      video_url: 'https://vz-0bae8f18-f47.b-cdn.net/19a45b4e-db32-4c61-8d21-658bb69d9df4/playlist.m3u8',
+      trailer_url: 'https://vz-0bae8f18-f47.b-cdn.net/60efa6ca-0209-4dc4-b309-e9f5488c0d4a/playlist.m3u8',
+    },
     { id: 'm2', festival_id: 'f1', title: 'The Last Ferry', director: 'J. Okafor', runtime_min: 18, genre: 'Documentary' },
     { id: 'm3', festival_id: 'f2', title: 'Knock Twice', director: 'R. Lindqvist', runtime_min: 9, genre: 'Horror' },
     { id: 'm4', festival_id: 'f2', title: 'Basement Light', director: 'T. Nakamura', runtime_min: 14, genre: 'Horror' },

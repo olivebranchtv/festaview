@@ -243,3 +243,8 @@ h1, h2 { letter-spacing: -0.02em; }
 .stage-bar span { flex: 1; color: #ddd; }
 .stage-err { position: absolute; top: 20px; left: 0; right: 0; text-align: center; color: #ff7b80; }
 .att { width: 140px !important; flex: none; }
+
+/* film / trailer switch */
+.modes { display: flex; gap: 6px; padding: 12px 16px 0; }
+.modes button { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+.modes button.on { background: var(--gold); color: #1a1405; border-color: var(--gold); font-weight: 700; }

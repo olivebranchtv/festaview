@@ -106,6 +106,7 @@ function InquiryForm() {
 }
 
 function FilmModal({ film, festival, onClose }) {
+  const [mode, setMode] = useState('film')
   useEffect(() => {
     const on = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', on)
@@ -114,8 +115,20 @@ function FilmModal({ film, festival, onClose }) {
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={film.title}>
-        {film.video_url ? (
-          <Suspense fallback={<div className="modal-art" />}><Player film={film} /></Suspense>
+        {film.video_url || film.trailer_url ? (
+          <>
+            {film.video_url && film.trailer_url && (
+              <div className="modes">
+                <button className={mode === 'film' ? 'on' : ''} onClick={() => setMode('film')}>Film</button>
+                <button className={mode === 'trailer' ? 'on' : ''} onClick={() => setMode('trailer')}>Trailer</button>
+              </div>
+            )}
+            <Suspense fallback={<div className="modal-art" />}>
+              {mode === 'trailer' || !film.video_url
+                ? <Player key="trailer" film={{ ...film, video_url: film.trailer_url, captions_url: null }} track={false} />
+                : <Player key="film" film={film} />}
+            </Suspense>
+          </>
         ) : (
           <div className="modal-art" style={film.poster_url ? undefined : bg(festival && festival.brand_color)}>
             {film.poster_url && <img src={film.poster_url} alt="" />}

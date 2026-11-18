@@ -3,7 +3,7 @@ import Hls from 'hls.js'
 import { logView } from './data.js'
 
 // Plays HLS (via hls.js where the browser lacks native HLS) or MP4, and records watch time for analytics.
-export default function Player({ film }) {
+export default function Player({ film, track = true }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -28,7 +28,7 @@ export default function Player({ film }) {
     }
     const onSeek = () => { lastT = v.currentTime }
     const flush = () => {
-      if (watched >= 1) {
+      if (track && watched >= 1) {
         logView({ film_id: film.id, festival_id: film.festival_id, seconds_watched: Math.min(21600, Math.round(watched)) })
         watched = 0
       }
