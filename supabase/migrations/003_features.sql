@@ -12,8 +12,8 @@ create or replace function is_platform_admin() returns boolean
 language sql security definer stable set search_path = public as $$
   select exists (select 1 from platform_admins where user_id = auth.uid())
 $$;
-revoke execute on function is_platform_admin() from public, anon;
-grant execute on function is_platform_admin() to authenticated;
+-- Policies on public tables (festivals) call this, so anon must be allowed to execute it (it returns false for anon).
+grant execute on function is_platform_admin() to anon, authenticated;
 
 create policy "platform admins read self" on platform_admins for select using (user_id = auth.uid());
 grant select on platform_admins to authenticated;

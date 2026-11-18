@@ -26,6 +26,12 @@ const DEMO = {
     { id: 'l1', festival_id: 'f1', name: 'Harborlight Live', is_live: true },
     { id: 'l2', festival_id: 'f2', name: 'Night Owl Replay Channel', is_live: false, is_replay_loop: true },
   ],
+  venues: [
+    { id: 'v1', festival_id: 'f1', name: 'Lighthouse Cinema', city: 'Portland', address: '12 Harbor St' },
+  ],
+  screenings: [
+    { id: 'sc1', festival_id: 'f1', venue_id: 'v1', film_id: 'm1', title: 'Salt and Rope', room: 'Screen 1', starts_at: inHours(72), ends_at: inHours(73), ticket_url: 'https://example.com/tickets' },
+  ],
   schedule: [
     { id: 's1', live_feed_id: 'l1', film_id: 'm1', title: null, starts_at: inHours(2), ends_at: inHours(3) },
     { id: 's2', live_feed_id: 'l1', film_id: 'm2', title: 'Q&A with the director', starts_at: inHours(26), ends_at: inHours(27) },
@@ -36,14 +42,17 @@ const DEMO = {
 // Flat queries merged in JS (PostgREST FK joins are unreliable on this stack).
 export async function loadData() {
   if (!supabase) return DEMO
-  const [f, m, l, s] = await Promise.all([
+  const [f, m, l, s, v, sc] = await Promise.all([
     supabase.from('festivals').select('*').eq('status', 'published').order('sort_order').order('name'),
     supabase.from('films').select('*').eq('status', 'published').order('created_at', { ascending: false }),
     supabase.from('live_feeds').select('*'),
     supabase.from('schedule_items').select('*').gte('ends_at', new Date().toISOString()).order('starts_at').limit(200),
+    // Venues and screenings are optional: if their tables are missing, the site still loads.
+    supabase.from('venues').select('*'),
+    supabase.from('screenings').select('*').gte('ends_at', new Date().toISOString()).order('starts_at').limit(300),
   ])
   if (f.error) throw f.error
-  return { demo: false, festivals: f.data || [], films: m.data || [], feeds: l.data || [], schedule: s.data || [] }
+  return { demo: false, festivals: f.data || [], films: m.data || [], feeds: l.data || [], schedule: s.data || [], venues: v.data || [], screenings: sc.data || [] }
 }
 
 // ---- anonymous visitor actions ----

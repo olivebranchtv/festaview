@@ -156,6 +156,7 @@ function FilmsTab({ festival, setMsg }) {
           <Field label="Available until" hint="The film is hidden again after this time."><input type="datetime-local" value={edit.available_until} onChange={(e) => set('available_until')(e.target.value)} /></Field>
         </div>
         {edit.id && <FilmmakerShares film={edit} setMsg={setMsg} />}
+        {edit.id && <ScreeningPackage film={edit} setMsg={setMsg} />}
         <Field label="Status">
           <select value={edit.status} onChange={(e) => set('status')(e.target.value)}>
             <option value="draft">Draft (hidden)</option>
@@ -246,6 +247,164 @@ function LiveTab({ festival, setMsg }) {
 }
 
 const money = (n) => '$' + (n || 0).toFixed(2)
+
+function downloadText(name, text) {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+// Private links a venue needs to screen a film in a theater (master file, DCP, subtitles, technical notes).
+function ScreeningPackage({ film, setMsg }) {
+  const [m, setM] = useState({ master_url: '', dcp_url: '', subtitles_url: '', tech_notes: '' })
+  useEffect(() => { api.getMaster(film.id).then((d) => setM({ master_url: '', dcp_url: '', subtitles_url: '', tech_notes: '', ...d })).catch(() => {}) }, [film.id])
+  const set = (k) => (e) => setM((p) => ({ ...p, [k]: e.target.value }))
+  const save = async () => { try { await api.saveMaster(film.id, m); setMsg('Screening package saved.') } catch (x) { setMsg(x.message, true) } }
+  return (
+    <div className="subpanel">
+      <h3>Theater screening package (private)</h3>
+      <p className="note small">Only your festival team sees these. Venues need a cinema-quality master or a finished DCP, not the web stream. Host files on private storage and paste the download links.</p>
+      <Field label="Master file link (ProRes or high-bitrate H.264)"><input value={m.master_url || ''} onChange={set('master_url')} placeholder="https://" /></Field>
+      <Field label="DCP link (if you have one)"><input value={m.dcp_url || ''} onChange={set('dcp_url')} placeholder="https://" /></Field>
+      <Field label="Subtitles link"><input value={m.subtitles_url || ''} onChange={set('subtitles_url')} placeholder="https://" /></Field>
+      <Field label="Technical notes (frame rate, audio, aspect ratio)"><textarea rows={2} value={m.tech_notes || ''} onChange={set('tech_notes')} /></Field>
+      <button type="button" className="btn ghost" onClick={save}>Save package</button>
+    </div>
+  )
+}
+
+function ScreeningsTab({ festival, setMsg }) {
+  const [venues, setVenues] = useState([])
+  const [screenings, setScreenings] = useState([])
+  const [films, setFilms] = useState([])
+  const [logs, setLogs] = useState([])
+  const [v, setV] = useState({ name: '', city: '', address: '', capacity: '' })
+  const [s, setS] = useState({ venue_id: '', film_id: '', title: '', room: '', starts_at: '', ends_at: '', ticket_url: '' })
+
+  const refresh = useCallback(async () => {
+    try {
+      const [vn, sc, fl, lg] = await Promise.all([api.listVenues(festival.id), api.listScreenings(festival.id), api.listFilms(festival.id), api.listLogs(festival.id)])
+      setVenues(vn); setScreenings(sc); setFilms(fl); setLogs(lg)
+    } catch (e) { setMsg(e.message, true) }
+  }, [festival.id, setMsg])
+  useEffect(() => { refresh() }, [refresh])
+
+  const addVenue = async () => {
+    if (!v.name) { setMsg('Enter a venue name.', true); return }
+    try { await api.saveVenue(festival.id, { ...v, capacity: num(v.capacity) }); setV({ name: '', city: '', address: '', capacity: '' }); refresh() } catch (x) { setMsg(x.message, true) }
+  }
+  const addScreening = async () => {
+    if (!s.starts_at || !s.ends_at) { setMsg('Choose a start and end time.', true); return }
+    if (new Date(s.ends_at) <= new Date(s.starts_at)) { setMsg('The end time must be after the start time.', true); return }
+    if (!s.film_id && !s.title) { setMsg('Pick a film or type a title.', true); return }
+    try {
+      await api.saveScreening(festival.id, { ...s, starts_at: fromLocal(s.starts_at), ends_at: fromLocal(s.ends_at) })
+      setS({ venue_id: '', film_id: '', title: '', room: '', starts_at: '', ends_at: '', ticket_url: '' }); refresh()
+    } catch (x) { setMsg(x.message, true) }
+  }
+  const pickFilm = (id) => {
+    const film = films.find((m) => m.id === id)
+    setS((p) => ({ ...p, film_id: id, title: p.title || (film ? film.title : '') }))
+  }
+  const fmt = (iso) => new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+
+  const pkg = async (sc) => {
+    const film = films.find((m) => m.id === sc.film_id)
+    const venue = venues.find((x) => x.id === sc.venue_id)
+    let master = {}
+    if (film) { try { master = await api.getMaster(film.id) } catch { /* ignore */ } }
+    const lines = [
+      'SCREENING PACKAGE', festival.name, '',
+      'Film: ' + (sc.title || (film && film.title) || ''),
+      film && film.director ? 'Director: ' + film.director : '',
+      film && film.runtime_min ? 'Runtime: ' + film.runtime_min + ' min' : '',
+      film && film.rating ? 'Rating: ' + film.rating : '',
+      '', 'Venue: ' + (venue ? venue.name : 'TBA'),
+      venue && venue.address ? 'Address: ' + venue.address + (venue.city ? ', ' + venue.city : '') : '',
+      sc.room ? 'Room: ' + sc.room : '',
+      'Starts: ' + fmt(sc.starts_at), 'Ends: ' + fmt(sc.ends_at), '',
+      'Master file: ' + (master.master_url || 'not provided'),
+      'DCP: ' + (master.dcp_url || 'not provided'),
+      'Subtitles: ' + (master.subtitles_url || 'not provided'),
+      master.tech_notes ? 'Technical notes: ' + master.tech_notes : '',
+      '', 'Please confirm receipt and run a test playback before doors open.',
+    ].filter((l, i, a) => l !== '' || a[i - 1] !== '')
+    downloadText('screening-package-' + (film ? film.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() : 'event') + '.txt', lines.join('\n'))
+  }
+  const remove = async (id) => { try { await api.deleteScreening(id); refresh() } catch (x) { setMsg(x.message, true) } }
+  const removeVenue = async (id) => { try { await api.deleteVenue(id); refresh() } catch (x) { setMsg(x.message, true) } }
+  const attendance = (id) => logs.filter((l) => l.screening_id === id).reduce((a, l) => a + Number(l.attendance || 0), 0)
+
+  return (
+    <div>
+      <div className="panel">
+        <h2>Venues</h2>
+        <ul className="list">
+          {venues.length === 0 && <li><span className="note">No venues yet.</span></li>}
+          {venues.map((x) => (
+            <li key={x.id}>
+              <div><strong>{x.name}</strong><small>{[x.address, x.city, x.capacity ? x.capacity + ' seats' : null].filter(Boolean).join(' | ')}</small></div>
+              <button type="button" className="btn ghost danger" onClick={() => removeVenue(x.id)}>Remove</button>
+            </li>
+          ))}
+        </ul>
+        <div className="inline-form">
+          <input placeholder="Venue name" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />
+          <input placeholder="City" value={v.city} onChange={(e) => setV({ ...v, city: e.target.value })} />
+          <input placeholder="Address" value={v.address} onChange={(e) => setV({ ...v, address: e.target.value })} />
+          <input placeholder="Seats" inputMode="numeric" value={v.capacity} onChange={(e) => setV({ ...v, capacity: e.target.value })} />
+          <button type="button" className="btn ghost" onClick={addVenue}>Add venue</button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>Theater screenings</h2>
+        <p className="note small">Showtimes appear on your festival page with a ticket link and a calendar download. Use Theater Mode to run a show from a laptop or media box connected to a projector.</p>
+        <ul className="list">
+          {screenings.length === 0 && <li><span className="note">No screenings yet.</span></li>}
+          {screenings.map((sc) => {
+            const venue = venues.find((x) => x.id === sc.venue_id)
+            return (
+              <li key={sc.id}>
+                <div>
+                  <strong>{sc.title || 'Untitled'}</strong>
+                  <small>{fmt(sc.starts_at)} | {venue ? venue.name : 'Venue TBA'}{sc.room ? ' | ' + sc.room : ''}{attendance(sc.id) ? ' | attendance ' + attendance(sc.id) : ''}</small>
+                </div>
+                <button type="button" className="btn ghost" onClick={() => pkg(sc)}>Package</button>
+                <button type="button" className="btn ghost danger" onClick={() => remove(sc.id)}>Remove</button>
+              </li>
+            )
+          })}
+        </ul>
+        <div className="two">
+          <Field label="Venue">
+            <select value={s.venue_id} onChange={(e) => setS({ ...s, venue_id: e.target.value })}>
+              <option value="">Choose venue</option>
+              {venues.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Film">
+            <select value={s.film_id} onChange={(e) => pickFilm(e.target.value)}>
+              <option value="">None (use a title)</option>
+              {films.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
+            </select>
+          </Field>
+          <Field label="Title shown to the public"><input value={s.title} onChange={(e) => setS({ ...s, title: e.target.value })} /></Field>
+          <Field label="Room or screen"><input value={s.room} onChange={(e) => setS({ ...s, room: e.target.value })} /></Field>
+          <Field label="Starts"><input type="datetime-local" value={s.starts_at} onChange={(e) => setS({ ...s, starts_at: e.target.value })} /></Field>
+          <Field label="Ends"><input type="datetime-local" value={s.ends_at} onChange={(e) => setS({ ...s, ends_at: e.target.value })} /></Field>
+          <Field label="Ticket link (optional)"><input value={s.ticket_url} onChange={(e) => setS({ ...s, ticket_url: e.target.value })} placeholder="https://" /></Field>
+        </div>
+        <div className="actions">
+          <button type="button" className="btn" onClick={addScreening}>Add screening</button>
+          <a className="btn ghost" href={'#/theater/' + festival.slug}>Open Theater Mode</a>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function downloadCsv(name, rows) {
   const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"'
@@ -468,12 +627,13 @@ export default function Admin() {
             </select>
           )}
           <nav className="tabs">
-            {[['films', 'Films'], ['live', 'Live channels'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
+            {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
               <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsgState(null) }}>{label}</button>
             ))}
           </nav>
           {tab === 'films' && <FilmsTab festival={current} setMsg={setMsg} />}
           {tab === 'live' && <LiveTab festival={current} setMsg={setMsg} />}
+          {tab === 'screenings' && <ScreeningsTab festival={current} setMsg={setMsg} />}
           {tab === 'analytics' && <Analytics festival={current} setMsg={setMsg} />}
           {tab === 'festival' && (
             <FestivalTab

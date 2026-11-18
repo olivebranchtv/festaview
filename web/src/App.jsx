@@ -5,6 +5,7 @@ import { loadData, castVote, submitInquiry } from './data.js'
 const Admin = lazy(() => import('./Admin.jsx'))
 const Network = lazy(() => import('./Network.jsx'))
 const Player = lazy(() => import('./Player.jsx'))
+const Theater = lazy(() => import('./Theater.jsx'))
 import { CONTACT_EMAIL, ROKU_URL } from './config.js'
 
 function useHashRoute() {
@@ -389,6 +390,57 @@ function Hub({ data, go, onOpen }) {
   )
 }
 
+const icsStamp = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+const icsText = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+
+function downloadIcs(festival, items, venues) {
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Festaview//Screenings//EN', 'CALSCALE:GREGORIAN']
+  for (const s of items) {
+    const v = venues.find((x) => x.id === s.venue_id)
+    lines.push(
+      'BEGIN:VEVENT',
+      'UID:' + s.id + '@festaview',
+      'DTSTAMP:' + icsStamp(new Date().toISOString()),
+      'DTSTART:' + icsStamp(s.starts_at),
+      'DTEND:' + icsStamp(s.ends_at),
+      'SUMMARY:' + icsText((s.title || 'Screening') + ' - ' + festival.name),
+      'LOCATION:' + icsText(v ? [v.name, v.address, v.city].filter(Boolean).join(', ') : ''),
+      s.ticket_url ? 'URL:' + s.ticket_url : 'DESCRIPTION:' + icsText(festival.name),
+      'END:VEVENT',
+    )
+  }
+  lines.push('END:VCALENDAR')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/calendar' }))
+  a.download = festival.slug + '-screenings.ics'
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+function TheaterScreenings({ fest, data }) {
+  const items = (data.screenings || []).filter((s) => s.festival_id === fest.id)
+  if (!items.length) return null
+  return (
+    <section className="block">
+      <h2>In theaters</h2>
+      <ul className="schedule">
+        {items.map((s) => {
+          const v = (data.venues || []).find((x) => x.id === s.venue_id)
+          return (
+            <li key={s.id}>
+              <span className="when">{fmtWhen(s.starts_at)}</span>
+              <strong>{s.title || 'Screening'}</strong>
+              <small>{v ? [v.name, v.city].filter(Boolean).join(', ') : 'Venue to be announced'}{s.room ? ' | ' + s.room : ''}</small>
+              {s.ticket_url && <a className="btn ghost small" href={s.ticket_url} target="_blank" rel="noreferrer">Tickets</a>}
+            </li>
+          )
+        })}
+      </ul>
+      <div className="actions"><button className="btn ghost" onClick={() => downloadIcs(fest, items, data.venues || [])}>Add all to calendar</button></div>
+    </section>
+  )
+}
+
 function Festival({ data, slug, onOpen }) {
   const fest = data.festivals.find((f) => f.slug === slug)
   if (!fest) return <section className="block"><p className="note">Festival not found. <a href="#/">Back to all festivals</a></p></section>
@@ -447,6 +499,7 @@ function Festival({ data, slug, onOpen }) {
           </section>
         )
       })()}
+      <TheaterScreenings fest={fest} data={data} />
       <section className="block">
         <h2>Official Selection</h2>
         {films.length === 0 ? (
@@ -477,6 +530,8 @@ export default function App() {
   const m = hash.match(/^#\/festival\/(.+)$/)
   const isAdmin = hash.startsWith('#/admin')
   const isNetwork = hash.startsWith('#/network')
+  const isTheater = hash.startsWith('#/theater')
+  const isPublic = !isAdmin && !isNetwork && !isTheater
 
   const go = (id) => {
     const scroll = () => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }) }
@@ -488,18 +543,19 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header go={go} />
+      {!isTheater && <Header go={go} />}
       <main>
         <Suspense fallback={<p className="note pad">Loading...</p>}>
           {isAdmin && <div className="wrap-admin"><Admin /></div>}
           {isNetwork && <div className="wrap-admin"><Network /></div>}
+          {isTheater && <Theater slug={decodeURIComponent(hash.replace('#/theater/', ''))} />}
         </Suspense>
-        {!isAdmin && !isNetwork && error && <p className="note pad">{error}</p>}
-        {!isAdmin && !isNetwork && !data && !error && <p className="note pad">Loading...</p>}
-        {!isAdmin && !isNetwork && data && data.demo && <p className="banner">Demo content. Connect Supabase to show real festivals.</p>}
-        {!isAdmin && !isNetwork && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} /> : <Hub data={data} go={go} onOpen={openFilm} />)}
+        {isPublic && error && <p className="note pad">{error}</p>}
+        {isPublic && !data && !error && <p className="note pad">Loading...</p>}
+        {isPublic && data && data.demo && <p className="banner">Demo content. Connect Supabase to show real festivals.</p>}
+        {isPublic && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} /> : <Hub data={data} go={go} onOpen={openFilm} />)}
       </main>
-      {!isAdmin && !isNetwork && <Footer />}
+      {isPublic && <Footer />}
       {open && <FilmModal film={open} festival={openFest} onClose={() => setOpen(null)} />}
     </div>
   )

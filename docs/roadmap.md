@@ -32,3 +32,10 @@ Not built (needs external accounts or larger work):
 - Jury/screener portal, distributor portal
 - Geo blocking (needs edge/CDN or Bunny token rules; not enforceable in the database)
 - Roku: sideload testing, icons/splash, channel publish; other TV platforms
+
+## Theater screenings (2026-11-18)
+Built: venues, theater screenings with ticket links, public "In theaters" list + calendar (.ics) download, private
+screening package (master/DCP/subtitle links + tech notes) with downloadable per-screening package, Theater Mode
+(#/theater/<festival-slug>: day/venue playlist, intro cards, fullscreen, pause/skip, MP4 preload, attendance log).
+Notes: DCP/KDM creation is not built (use DCP-o-matic or a partner service); theatrical rights must be confirmed
+with filmmakers separately from streaming rights; HDMI playback has no DCP-style encryption.

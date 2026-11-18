@@ -227,3 +227,63 @@ export async function listInquiries() {
   if (r.error) throw r.error
   return r.data
 }
+
+// ---- venues and screenings ----
+export async function listVenues(fid) {
+  if (isDemo) return load().venues || []
+  const r = await supabase.from('venues').select('*').eq('festival_id', fid).order('name')
+  if (r.error) throw r.error
+  return r.data
+}
+export async function saveVenue(fid, v) {
+  if (isDemo) { const s = load(); s.venues = s.venues || []; s.venues.push({ ...v, id: uid(), festival_id: fid }); persist(s); return }
+  const r = await supabase.from('venues').insert({ ...clean(v), festival_id: fid })
+  if (r.error) throw r.error
+}
+export async function deleteVenue(id) {
+  if (isDemo) { const s = load(); s.venues = (s.venues || []).filter((x) => x.id !== id); persist(s); return }
+  const r = await supabase.from('venues').delete().eq('id', id)
+  if (r.error) throw r.error
+}
+export async function listScreenings(fid) {
+  if (isDemo) return load().screenings || []
+  const r = await supabase.from('screenings').select('*').eq('festival_id', fid).order('starts_at')
+  if (r.error) throw r.error
+  return r.data
+}
+export async function saveScreening(fid, sc) {
+  if (isDemo) { const s = load(); s.screenings = s.screenings || []; s.screenings.push({ ...sc, id: uid(), festival_id: fid }); persist(s); return }
+  const r = await supabase.from('screenings').insert({ ...clean(sc), festival_id: fid })
+  if (r.error) throw r.error
+}
+export async function deleteScreening(id) {
+  if (isDemo) { const s = load(); s.screenings = (s.screenings || []).filter((x) => x.id !== id); persist(s); return }
+  const r = await supabase.from('screenings').delete().eq('id', id)
+  if (r.error) throw r.error
+}
+
+// ---- screening packages (private master/DCP links) ----
+export async function getMaster(filmId) {
+  if (isDemo) return (load().masters || {})[filmId] || {}
+  const r = await supabase.from('film_masters').select('*').eq('film_id', filmId)
+  if (r.error) throw r.error
+  return (r.data && r.data[0]) || {}
+}
+export async function saveMaster(filmId, m) {
+  if (isDemo) { const s = load(); s.masters = s.masters || {}; s.masters[filmId] = m; persist(s); return }
+  const r = await supabase.from('film_masters').upsert({ film_id: filmId, master_url: m.master_url || null, dcp_url: m.dcp_url || null, subtitles_url: m.subtitles_url || null, tech_notes: m.tech_notes || null })
+  if (r.error) throw r.error
+}
+
+// ---- attendance logs ----
+export async function listLogs(fid) {
+  if (isDemo) return load().logs || []
+  const r = await supabase.from('screening_logs').select('*').eq('festival_id', fid).order('logged_at', { ascending: false })
+  if (r.error) throw r.error
+  return r.data
+}
+export async function saveLog(fid, log) {
+  if (isDemo) { const s = load(); s.logs = s.logs || []; s.logs.push({ ...log, id: uid(), festival_id: fid }); persist(s); return }
+  const r = await supabase.from('screening_logs').insert({ ...clean(log), festival_id: fid })
+  if (r.error) throw r.error
+}
