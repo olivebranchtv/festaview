@@ -37,7 +37,8 @@ function statusMessage(r) {
   }
 }
 
-function ChatPanel({ ev, code }) {
+// Chat and Q&A panel. The virtual theater passes its own loader and poster so the same panel serves both.
+export function ChatPanel({ ev, code, loader, poster }) {
   const [msgs, setMsgs] = useState([])
   const [tab, setTab] = useState('chat')
   const [name, setName] = useState(() => { try { return localStorage.getItem('fv_name') || '' } catch { return '' } })
@@ -47,7 +48,7 @@ function ChatPanel({ ev, code }) {
 
   useEffect(() => {
     let stop = false
-    const load = async () => { const m = await listChat(ev.id); if (!stop) setMsgs(m) }
+    const load = async () => { const m = await (loader ? loader(ev.id) : listChat(ev.id)); if (!stop) setMsgs(m) }
     load()
     const t = setInterval(load, 3000)
     return () => { stop = true; clearInterval(t) }
@@ -59,8 +60,9 @@ function ChatPanel({ ev, code }) {
     e.preventDefault()
     if (!text.trim()) return
     try { localStorage.setItem('fv_name', name) } catch { /* ignore */ }
-    const r = await postChat(ev, code, name, text, tab === 'chat' ? 'chat' : 'question')
-    if (r === 'ok') { setText(''); setErr(''); setMsgs(await listChat(ev.id)) }
+    const kind = tab === 'chat' ? 'chat' : 'question'
+    const r = await (poster ? poster(name, text, kind) : postChat(ev, code, name, text, kind))
+    if (r === 'ok') { setText(''); setErr(''); setMsgs(await (loader ? loader(ev.id) : listChat(ev.id))) }
     else setErr({ slow_down: 'Slow down a little.', not_watching: 'Press play first to join the chat.', closed: 'Chat is closed.', empty: 'Type a message first.' }[r] || 'Could not send. Try again.')
   }
   return (

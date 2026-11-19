@@ -1,5 +1,5 @@
 import { pageSeo, injectSeo, sitemapXml, llmsTxt, loadCatalog } from './lib/seo.mjs'
-import { filmPath, eventPath, channelPath, festivalPath } from '../src/paths.js'
+import { filmPath, eventPath, channelPath, festivalPath, cinemaPath } from '../src/paths.js'
 
 let pass = 0, fail = 0
 const ok = (name, cond, extra = '') => { cond ? pass++ : fail++; console.log((cond ? 'PASS ' : 'FAIL ') + name + (cond ? '' : ' ' + extra)) }
@@ -24,12 +24,16 @@ const data = {
   venues: [{ id: 'v1', festival_id: 'f1', name: 'Lighthouse Cinema', city: 'Phoenix' }],
   products: [{ id: 'p1', festival_id: 'f1', event_id: 'e2', film_id: null, price_cents: 1500, currency: 'usd', active: true }],
   screenings: [],
+  cinema: [
+    { id: 'c0a1b2c3-0000-4000-8000-000000000001', screen_name: 'Screen 1', screen_number: 1, festival_name: 'Olive Branch Film Festival', festival_slug: 'olive-branch', title: 'Sparrows Premiere Night', description: 'A shared premiere of The Sparrows Nesting with a short Q&A.', poster_url: 'https://img.example/p1.jpg', starts_at: iso(5), ends_at: iso(7), seats: 100, taken: 100, access: 'free' },
+    { id: 'c0a1b2c3-0000-4000-8000-000000000002', screen_name: 'Screen 2', screen_number: 2, festival_name: null, festival_slug: null, title: 'Late Show <Live>', description: null, poster_url: null, starts_at: iso(30), ends_at: iso(32), seats: null, taken: 3, access: 'free' },
+  ],
 }
 const base = '<!doctype html><html lang="en"><head><title>Festaview</title><meta name="description" content="old"><meta property="og:title" content="old"><link rel="canonical" href="https://old.example/"></head><body><div id="root"></div></body></html>'
 
 const paths = [
   '/', '/festivals', '/festival/olive-branch', '/films', filmPath(data.films[0]), filmPath(data.films[1]), '/virtual', eventPath(data.events[0]), eventPath(data.events[1]),
-  '/tv-guide', '/channel/mix', '/channel/olive-branch', '/live', '/live/l1/olive-branch-live', '/watch', '/for-festivals', '/about',
+  '/cinema', cinemaPath(data.cinema[0]), cinemaPath(data.cinema[1]), '/tv-guide', '/channel/mix', '/channel/olive-branch', '/live', '/live/l1/olive-branch-live', '/watch', '/for-festivals', '/about',
 ]
 const count = (s, re) => (s.match(re) || []).length
 
@@ -65,6 +69,11 @@ ok('ticketed event offer uses the real ticket price', (() => { const e = ld(even
 ok('for-festivals has FAQPage matching the visible questions', (() => { const f = ld('/for-festivals').find((x) => x['@type'] === 'FAQPage'); return f && f.mainEntity.length === 6 && pageSeo('/for-festivals', data).body.includes(f.mainEntity[0].name) })())
 ok('inner pages have breadcrumbs', ['/festivals', '/films', '/virtual', '/tv-guide', '/about', filmPath(data.films[0])].every((p) => types(p).includes('BreadcrumbList')))
 
+ok('cinema board is a CollectionPage with an ItemList', (() => { const c = ld('/cinema').find((x) => x['@type'] === 'CollectionPage'); return c && c.mainEntity.itemListElement.length === 2 })())
+ok('showing page is a ScreeningEvent with sold-out availability', (() => { const e = ld(cinemaPath(data.cinema[0])).find((x) => x['@type'] === 'ScreeningEvent'); return e && e.offers.availability.endsWith('SoldOut') && e.eventAttendanceMode.includes('Online') })())
+ok('open-seating showing is in stock', (() => { const e = ld(cinemaPath(data.cinema[1])).find((x) => x['@type'] === 'ScreeningEvent'); return e && e.offers.availability.endsWith('InStock') })())
+ok('showing title is escaped in HTML', !injectSeo(base, pageSeo(cinemaPath(data.cinema[1]), data)).includes('<Live>'))
+
 // ---- security: a ticketed film's video link must never appear in public HTML
 const ticketedHtml = injectSeo(base, pageSeo(filmPath(data.films[1]), data))
 ok('ticketed film page has no VideoObject and no stream link', !ticketedHtml.includes('VideoObject') && !ticketedHtml.includes('contentUrl'))
@@ -76,7 +85,7 @@ ok('titles and text with < > & " are escaped in HTML', !trick.includes('<Night>'
 ok('JSON-LD cannot break out of its script tag', [...trick.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].every((m) => !m[1].includes('<')))
 
 // ---- real 404s
-for (const p of ['/festival/does-not-exist', '/film/zzz/nothing', '/virtual/zzz', '/channel/nope', '/live/zzz', '/random-page', '/festivals/extra']) {
+for (const p of ['/festival/does-not-exist', '/film/zzz/nothing', '/virtual/zzz', '/cinema/zzz/nothing', '/channel/nope', '/live/zzz', '/random-page', '/festivals/extra']) {
   const s = pageSeo(p, data)
   ok('404 for ' + p, s.status === 404 && s.robots === 'noindex')
 }
@@ -93,7 +102,7 @@ const sm = sitemapXml(data)
 ok('sitemap is XML with the right namespace', sm.startsWith('<?xml') && sm.includes('http://www.sitemaps.org/schemas/sitemap/0.9'))
 const locs = [...sm.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1])
 ok('sitemap has no duplicates', new Set(locs).size === locs.length)
-ok('sitemap lists every festival, film, current event, channel and live feed', ['/festival/olive-branch', filmPath(data.films[0]), filmPath(data.films[1]), eventPath(data.events[0]), eventPath(data.events[1]), '/channel/mix', '/live/l1/olive-branch-live', '/virtual', '/tv-guide'].every((p) => locs.includes('https://festaview.com' + p)))
+ok('sitemap lists every festival, film, current event, channel and live feed', ['/festival/olive-branch', filmPath(data.films[0]), filmPath(data.films[1]), eventPath(data.events[0]), eventPath(data.events[1]), '/channel/mix', '/live/l1/olive-branch-live', '/virtual', '/cinema', cinemaPath(data.cinema[0]), cinemaPath(data.cinema[1]), '/tv-guide'].every((p) => locs.includes('https://festaview.com' + p)))
 ok('sitemap leaves out ended events', !locs.some((l) => l.includes('/virtual/e3')))
 ok('sitemap leaves out private pages', !locs.some((l) => /\/(admin|network|theater|access)/.test(l)))
 ok('sitemap uses the real host only', locs.every((l) => l.startsWith('https://festaview.com')))

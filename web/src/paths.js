@@ -16,12 +16,14 @@ export const filmPath = (m) => '/film/' + m.id + '/' + (slugify(m.title) || 'fil
 export const eventPath = (e) => '/virtual/' + e.id + '/' + (slugify(e.title) || 'event')
 export const channelPath = (c) => '/channel/' + c.slug
 export const liveFeedPath = (l) => '/live/' + l.id + '/' + (slugify(l.name) || 'channel')
+export const cinemaPath = (s) => '/cinema/' + s.id + '/' + (slugify(s.title) || 'showing')
 
 // Public pages that are listed in menus and the sitemap.
 export const STATIC_PAGES = [
   ['/', 'Home'],
   ['/festivals', 'Film festivals'],
   ['/films', 'Films'],
+  ['/cinema', 'Virtual theater'],
   ['/virtual', 'Virtual cinema'],
   ['/tv-guide', 'TV guide'],
   ['/live', 'Live channels'],
@@ -44,6 +46,9 @@ export function matchRoute(pathname) {
     case 'virtual':
       if (seg.length === 1) return { name: 'virtualList' }
       return seg.length === 2 || seg.length === 3 ? { name: 'event', id: b, slug: c } : null
+    case 'cinema':
+      if (seg.length === 1) return { name: 'cinema' }
+      return seg.length === 2 || seg.length === 3 ? { name: 'showing', id: b, slug: c } : null
     case 'tv-guide': return seg.length === 1 ? { name: 'tvGuide' } : null
     case 'channel': return seg.length === 2 ? { name: 'channel', slug: b } : null
     case 'live':

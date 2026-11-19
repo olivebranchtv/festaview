@@ -1,7 +1,7 @@
 // Server-side SEO for every Festaview page: title, description, canonical, Open Graph / Twitter tags, JSON-LD structured
 // data, and real crawlable HTML content. Used by the edge function (so Google, Bing and AI crawlers receive complete HTML
 // without running JavaScript), the sitemap and llms.txt. Pure functions: no network access except loadCatalog().
-import { SITE_NAME, SITE_URL, slugify, festivalPath, filmPath, eventPath, channelPath, liveFeedPath, matchRoute, STATIC_PAGES } from '../../src/paths.js'
+import { SITE_NAME, SITE_URL, slugify, festivalPath, filmPath, eventPath, channelPath, liveFeedPath, cinemaPath, matchRoute, STATIC_PAGES } from '../../src/paths.js'
 import { FAQ, BENEFITS, SITE_DESCRIPTION, SITE_TAGLINE } from '../../src/siteContent.js'
 import { buildChannels } from '../../src/channels.js'
 import { eventState } from '../../src/virtual.js'
@@ -31,7 +31,7 @@ export async function loadCatalog(fetchFn = fetch, { url = PUBLIC_URL, key = PUB
       return await r.json()
     } catch { return null }
   }
-  const [festivals, films, events, feeds, venues, products, screenings] = await Promise.all([
+  const [festivals, films, events, feeds, venues, products, screenings, cinema] = await Promise.all([
     q('festivals?select=*&status=eq.published&order=sort_order,name'),
     q('films_public?select=*&order=created_at.desc'),
     q('virtual_events?select=*&status=eq.published'),
@@ -39,13 +39,14 @@ export async function loadCatalog(fetchFn = fetch, { url = PUBLIC_URL, key = PUB
     q('venues?select=*'),
     q('products?select=*&active=eq.true'),
     q('screenings?select=*'),
+    q('cinema_board?select=*&order=starts_at'),
   ])
   if (festivals === null) failed = true
   let filmList = films
   if (filmList === null) filmList = await q('films?select=*&status=eq.published&order=created_at.desc')
   return {
     ok: !failed,
-    festivals: festivals || [], films: filmList || [], events: events || [], feeds: feeds || [], venues: venues || [], products: products || [], screenings: screenings || [],
+    festivals: festivals || [], films: filmList || [], events: events || [], feeds: feeds || [], venues: venues || [], products: products || [], screenings: screenings || [], cinema: cinema || [],
   }
 }
 
@@ -182,6 +183,39 @@ export function pageSeo(pathname, data, origin) {
         '<p>' + esc(m.synopsis || 'Synopsis coming soon.') + '</p><p>' + (free ? 'Free to watch on ' + esc(SITE_NAME) + '.' : 'A ticketed screening: an access code or ticket is required.') + '</p>' +
         (more.length ? '<h2>More from ' + esc(f ? f.name : 'this festival') + '</h2>' + list(more.map((x) => filmLine(x, null))) : ''),
       )
+      return seo
+    }
+    case 'cinema': {
+      seo.title = 'Virtual Theater: Now Showing and Showtimes'
+      seo.description = 'The Festaview virtual theater. See what is playing on every screen and the showtimes, then watch together with everyone, from anywhere.'
+      const items = [['/', 'Home'], [null, 'Virtual theater']]
+      const shows = (data.cinema || []).slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+      seo.jsonld.push(breadcrumbLd(items), { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Virtual theater', url: seo.canonical, mainEntity: { '@type': 'ItemList', itemListElement: shows.slice(0, 50).map((s, i) => ({ '@type': 'ListItem', position: i + 1, url: abs(cinemaPath(s)), name: s.title })) } })
+      seo.body = shell(crumbs(items) + '<h1>Virtual theater</h1><p>Scheduled showings on numbered screens. Everyone watches together, and you can join late. Times appear in your own time zone.</p>' +
+        (shows.length ? '<h2>Now showing and coming up</h2>' + list(shows.map((s) => link(cinemaPath(s), s.title) + ' - ' + esc(s.screen_name) + ' - ' + esc(new Date(s.starts_at).toISOString()) + (s.festival_name ? ' - ' + esc(s.festival_name) : ''))) : '<p>No showings are scheduled right now. Check back soon.</p>'))
+      return seo
+    }
+    case 'showing': {
+      const s = (data.cinema || []).find((x) => x.id === route.id)
+      if (!s) return data.ok ? notFound(seo) : seo
+      seo.canonical = abs(cinemaPath(s))
+      seo.title = s.title + ': Virtual Theater Showing'
+      seo.description = clip((s.description || 'Watch ' + s.title + ' in the Festaview virtual theater.') + ' ' + s.screen_name + (s.festival_name ? ', presented by ' + s.festival_name : '') + '.', 158)
+      seo.image = s.poster_url || DEFAULT_IMAGE
+      const items = [['/', 'Home'], ['/cinema', 'Virtual theater'], [null, s.title]]
+      const ld = {
+        '@context': 'https://schema.org', '@type': 'ScreeningEvent', name: s.title, description: clip(s.description || s.title, 500), url: seo.canonical, image: s.poster_url || undefined,
+        startDate: new Date(s.starts_at).toISOString(), endDate: new Date(s.ends_at).toISOString(),
+        eventStatus: 'https://schema.org/EventScheduled', eventAttendanceMode: 'https://schema.org/OnlineEventAttendanceMode',
+        location: { '@type': 'VirtualLocation', url: seo.canonical, name: s.screen_name },
+        organizer: s.festival_name ? { '@type': 'Organization', name: s.festival_name, url: s.festival_slug ? abs('/festival/' + s.festival_slug) : undefined } : undefined,
+        isAccessibleForFree: s.access !== 'ticketed',
+        offers: { '@type': 'Offer', url: seo.canonical, price: '0', priceCurrency: 'USD', availability: s.seats != null && s.taken >= s.seats ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock' },
+        workPresented: s.kind === 'live' ? undefined : { '@type': 'Movie', name: s.title },
+      }
+      seo.jsonld.push(breadcrumbLd(items), ld)
+      seo.body = shell(crumbs(items) + '<h1>' + esc(s.title) + '</h1><p>' + esc(s.screen_name) + (s.festival_name ? ' | ' + esc(s.festival_name) : '') + '</p><p>' + esc(s.description || '') + '</p>' +
+        '<p>Showtime: ' + esc(new Date(s.starts_at).toISOString()) + ' (shown in your own time zone in the page). Runtime ' + s.runtime_min + ' minutes. ' + (s.access === 'ticketed' ? 'Ticketed.' : 'Free.') + (s.seats != null ? ' ' + Math.max(0, s.seats - s.taken) + ' seats left.' : '') + '</p>')
       return seo
     }
     case 'virtualList': {
@@ -332,6 +366,7 @@ export function sitemapXml(data) {
     ...data.festivals.map((f) => abs(festivalPath(f))),
     ...data.films.map((m) => abs(filmPath(m))),
     ...(data.events || []).filter((e) => !eventState(e).ended).map((e) => abs(eventPath(e))),
+    ...(data.cinema || []).map((s) => abs(cinemaPath(s))),
     ...buildChannels(data).map((c) => abs(channelPath(c))),
     ...data.feeds.filter((l) => l.is_live || l.is_replay_loop).map((l) => abs(liveFeedPath(l))),
   ]

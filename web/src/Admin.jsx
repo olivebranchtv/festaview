@@ -1183,6 +1183,167 @@ function GettingStarted({ festival, goTab }) {
   )
 }
 
+const EMPTY_SHOWING = {
+  kind: 'film', title: '', description: '', poster_url: '', film_ids: [], live_stream_url: '', live_runtime: '', preroll_url: '', sponsor_name: '',
+  rating: '', screen_id: '', starts_at: '', lobby: '10', qa: '0', seats: '',
+}
+
+// Book a showing in the Festaview virtual theater: pick a title, a screen and a start time.
+function CinemaTab({ festival, setMsg }) {
+  const [screens, setScreens] = useState([])
+  const [films, setFilms] = useState([])
+  const [showings, setShowings] = useState([])
+  const [taken, setTaken] = useState({})
+  const [f, setF] = useState(EMPTY_SHOWING)
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async () => {
+    try {
+      const [sc, fl, sh] = await Promise.all([api.listCinemaScreens(), api.listFilms(festival.id), api.listMyShowings(festival.id)])
+      setScreens(sc); setFilms(fl); setShowings(sh)
+      setTaken(await api.showingSeatCounts(sh.map((x) => x.id)))
+    } catch (e) { setMsg(e.message, true) }
+  }, [festival.id, setMsg])
+  useEffect(() => { refresh() }, [refresh])
+
+  const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }))
+  const eligible = films.filter((m) => m.video_url && ((Number(m.duration_sec) || 0) > 0 || (Number(m.runtime_min) || 0) > 0))
+  const secsOf = (m) => Number(m.duration_sec) || (Number(m.runtime_min) || 0) * 60
+  const runtimeMin = f.kind === 'live' ? Number(f.live_runtime) || 0 : Math.ceil(f.film_ids.reduce((a, id) => { const m = films.find((x) => x.id === id); return a + (m ? secsOf(m) : 0) }, 0) / 60)
+  const startMs = f.starts_at ? new Date(f.starts_at).getTime() : 0
+  const endsAt = startMs && runtimeMin ? new Date(startMs + (runtimeMin + (parseInt(f.qa, 10) || 0)) * 60000) : null
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return '' } })()
+  const local = (iso) => new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+  const move = (i, d) => setF((p) => { const a = p.film_ids.slice(); const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, film_ids: a } })
+  const addFilm = (id) => {
+    if (!id) return
+    const m = films.find((x) => x.id === id)
+    setF((p) => {
+      if (p.kind === 'film') return { ...p, film_ids: [id], title: p.title || m.title, poster_url: p.poster_url || m.poster_url || '', description: p.description || m.synopsis || '', rating: p.rating || m.rating || '' }
+      return p.film_ids.includes(id) ? p : { ...p, film_ids: [...p.film_ids, id] }
+    })
+  }
+
+  const submit = async (e) => {
+    e.preventDefault()
+    if (!f.title.trim()) { setMsg('Give the showing a title.', true); return }
+    if (!f.screen_id) { setMsg('Choose a screen.', true); return }
+    if (!f.starts_at) { setMsg('Choose a start time.', true); return }
+    if (f.kind !== 'live' && f.film_ids.length === 0) { setMsg('Choose at least one film.', true); return }
+    if (f.kind === 'live' && (!f.live_stream_url.trim() || !(runtimeMin > 0))) { setMsg('A live showing needs a stream link and how long it runs.', true); return }
+    setBusy(true)
+    try {
+      const res = await api.bookShowing({
+        festival_id: festival.id, screen_id: f.screen_id, kind: f.kind, title: f.title.trim(), description: f.description, poster_url: f.poster_url,
+        film_ids: f.kind === 'live' ? [] : f.film_ids, live_stream_url: f.live_stream_url, preroll_url: f.preroll_url, sponsor_name: f.sponsor_name, rating: f.rating,
+        starts_at: new Date(f.starts_at).toISOString(), lobby: parseInt(f.lobby, 10) || 0, qa: parseInt(f.qa, 10) || 0, seats: f.seats === '' ? null : parseInt(f.seats, 10),
+        live_runtime: f.kind === 'live' ? runtimeMin : null, runtime_min: runtimeMin,
+      })
+      setMsg(res && res.status === 'pending' ? 'Showing submitted. It will appear after Festaview approves it.' : 'Showing booked. It is on the marquee.')
+      setF({ ...EMPTY_SHOWING, film_ids: [] })
+      refresh()
+    } catch (x) { setMsg(x.message, true) }
+    setBusy(false)
+  }
+  const cancel = async (s) => {
+    if (!window.confirm('Cancel "' + s.title + '"? Viewers with a seat will no longer be able to watch.')) return
+    try { await api.cancelShowing(s.id); setMsg('Showing cancelled.'); refresh() } catch (x) { setMsg(x.message, true) }
+  }
+  const title = (id) => { const m = films.find((x) => x.id === id); return m ? m.title : '(removed film)' }
+
+  return (
+    <div>
+      <div className="panel">
+        <h2>Book a showing in the virtual theater</h2>
+        <p className="note">Pick a title, a screen and a start time. Everyone watches together, and viewers who arrive late join at the live point. Times you enter are in your own time zone{tz ? ' (' + tz + ')' : ''}. Viewers see their own. Your festival must be published, and showings may wait for Festaview's approval before they appear.</p>
+        <form onSubmit={submit}>
+          <div className="two">
+            <Field label="Type">
+              <select value={f.kind} onChange={(e) => setF({ ...EMPTY_SHOWING, kind: e.target.value, film_ids: [], screen_id: f.screen_id, starts_at: f.starts_at })}>
+                <option value="film">One film</option>
+                <option value="program">Program (several films back to back)</option>
+                <option value="live">Live event</option>
+              </select>
+            </Field>
+            <Field label="Screen">
+              <select value={f.screen_id} onChange={(e) => set('screen_id')(e.target.value)} required>
+                <option value="">Choose a screen</option>
+                {screens.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          {f.kind !== 'live' && (
+            <div className="subpanel">
+              <h3>{f.kind === 'program' ? 'Films in this program (in order)' : 'Film'}</h3>
+              <ul className="list">
+                {f.film_ids.length === 0 && <li><span className="note">No film chosen yet.</span></li>}
+                {f.film_ids.map((id, i) => (
+                  <li key={id}>
+                    <div><strong>{title(id)}</strong></div>
+                    {f.kind === 'program' && <><button type="button" className="btn ghost small" onClick={() => move(i, -1)}>Up</button><button type="button" className="btn ghost small" onClick={() => move(i, 1)}>Down</button></>}
+                    <button type="button" className="btn ghost small danger" onClick={() => set('film_ids')(f.film_ids.filter((x) => x !== id))}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+              <select value="" onChange={(e) => addFilm(e.target.value)}>
+                <option value="">{f.kind === 'program' ? 'Add a film' : 'Choose the film'}</option>
+                {eligible.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
+              </select>
+              {eligible.length === 0 && <p className="note small">Only films with a video link and a length can be booked. Add them under Films first.</p>}
+            </div>
+          )}
+
+          {f.kind === 'live' && (
+            <div className="two">
+              <Field label="Live stream link (HLS .m3u8)"><input value={f.live_stream_url} onChange={(e) => set('live_stream_url')(e.target.value)} placeholder="https://.../live.m3u8" /></Field>
+              <Field label="How long does it run (minutes)"><input value={f.live_runtime} onChange={(e) => set('live_runtime')(e.target.value)} inputMode="numeric" /></Field>
+            </div>
+          )}
+
+          <Field label="Title shown on the marquee"><input value={f.title} onChange={(e) => set('title')(e.target.value)} required maxLength={160} /></Field>
+          <Field label="Description"><textarea rows={3} value={f.description} onChange={(e) => set('description')(e.target.value)} /></Field>
+          <div className="two">
+            <Field label="Rating (optional)"><input value={f.rating} onChange={(e) => set('rating')(e.target.value)} placeholder="G, PG, PG-13, R" /></Field>
+            <Field label="Showtime" hint={'The film starts at this time for everyone' + (tz ? ' (your zone: ' + tz + ')' : '') + '.'}><input type="datetime-local" value={f.starts_at} onChange={(e) => set('starts_at')(e.target.value)} required /></Field>
+            <Field label="Doors open (minutes early)"><input value={f.lobby} onChange={(e) => set('lobby')(e.target.value)} inputMode="numeric" /></Field>
+            <Field label="Q&A after the film (minutes)"><input value={f.qa} onChange={(e) => set('qa')(e.target.value)} inputMode="numeric" /></Field>
+            <Field label="Seats (leave empty for open seating)"><input value={f.seats} onChange={(e) => set('seats')(e.target.value)} inputMode="numeric" /></Field>
+          </div>
+          <ImageField label="Poster" value={f.poster_url} onChange={set('poster_url')} festivalId={festival.id} onError={(m) => setMsg(m, true)} />
+          <div className="two">
+            <Field label="Sponsor message before the film (optional)" hint="Plays in the lobby while people find their seats."><input value={f.preroll_url} onChange={(e) => set('preroll_url')(e.target.value)} placeholder="https://.../sponsor.m3u8 or .mp4" /></Field>
+            <Field label="Sponsor name"><input value={f.sponsor_name} onChange={(e) => set('sponsor_name')(e.target.value)} /></Field>
+          </div>
+          {runtimeMin > 0 && <p className="note">Runtime {runtimeMin} minutes{endsAt ? '. The screen is busy until about ' + endsAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) + ' (including doors-open time and a short buffer).' : '.'}</p>}
+          <button className="btn" type="submit" disabled={busy}>{busy ? 'Booking...' : 'Book this showing'}</button>
+        </form>
+      </div>
+
+      <div className="panel">
+        <h2>Your showings</h2>
+        <ul className="list">
+          {showings.length === 0 && <li><span className="note">No showings yet.</span></li>}
+          {showings.map((s) => {
+            const sc = screens.find((x) => x.id === s.screen_id)
+            return (
+              <li key={s.id}>
+                <div>
+                  <strong>{s.title}</strong>
+                  <small>{sc ? sc.name : 'Screen'} | {local(s.starts_at)} | {s.runtime_min} min | {(taken[s.id] || 0)}{s.seats ? ' of ' + s.seats : ''} seats taken</small>
+                </div>
+                <span className={'pill ' + (s.status === 'scheduled' ? 'published' : s.status === 'pending' ? 'draft' : 'draft')}>{s.status === 'pending' ? 'awaiting approval' : s.status}</span>
+                {s.status === 'scheduled' && <a className="btn ghost" href={'/cinema/' + s.id}>View</a>}
+                {s.status !== 'cancelled' && <button type="button" className="btn ghost danger" onClick={() => cancel(s)}>Cancel</button>}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 export default function Admin() {
   const [session, setSession] = useState(undefined)
   const [festivals, setFestivals] = useState(null)
@@ -1250,7 +1411,7 @@ export default function Admin() {
           )}
           {current.status === 'draft' && <GettingStarted festival={current} goTab={setTab} />}
           <nav className="tabs">
-            {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
+            {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['cinema', 'Virtual theater'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
               <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsgState(null) }}>{label}</button>
             ))}
           </nav>
@@ -1258,6 +1419,7 @@ export default function Admin() {
           {tab === 'live' && <LiveTab festival={current} setMsg={setMsg} />}
           {tab === 'screenings' && <ScreeningsTab festival={current} setMsg={setMsg} />}
           {tab === 'virtual' && <VirtualTab festival={current} setMsg={setMsg} />}
+          {tab === 'cinema' && <CinemaTab festival={current} setMsg={setMsg} />}
           {tab === 'access' && <AccessTab festival={current} setMsg={setMsg} />}
           {tab === 'analytics' && <Analytics festival={current} setMsg={setMsg} />}
           {tab === 'festival' && (

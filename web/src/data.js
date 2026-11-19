@@ -217,3 +217,92 @@ export async function submitInquiry(i) {
   const r = await supabase.from('inquiries').insert(i)
   return r.error ? { ok: false, message: r.error.message } : { ok: true }
 }
+
+// ---- virtual theater ----
+export async function loadCinema() {
+  if (!supabase) return { ok: true, ...demoCinema() }
+  const [sc, sh] = await Promise.all([
+    supabase.from('cinema_screens').select('*').eq('active', true).order('number'),
+    supabase.from('cinema_board').select('*').order('starts_at'),
+  ])
+  return { ok: !sc.error && !sh.error, screens: sc.data || [], showings: sh.data || [] }
+}
+
+// Takes a seat if needed and returns everything the room needs, including the server clock.
+export async function cinemaJoin(id) {
+  if (!supabase) return demoCinemaJoin(id)
+  try {
+    const r = await supabase.rpc('cinema_join', { p_showing: id, p_device: deviceId() })
+    return r.error || !r.data ? { status: 'error' } : r.data
+  } catch { return { status: 'error' } }
+}
+
+export async function cinemaReserve(id) {
+  if (!supabase) { demoSeats(id); return { status: 'ok' } }
+  try {
+    const r = await supabase.rpc('cinema_reserve', { p_showing: id, p_device: deviceId() })
+    return r.error || !r.data ? { status: 'error' } : r.data
+  } catch { return { status: 'error' } }
+}
+
+export async function cinemaListChat(id) {
+  if (!supabase) return DEMO_CINEMA_CHAT[id] || []
+  const r = await supabase.from('cinema_chat').select('id,name,body,kind,answered,created_at').eq('showing_id', id).order('id', { ascending: false }).limit(60)
+  return r.error ? [] : (r.data || []).reverse()
+}
+
+export async function cinemaPostChat(id, name, body, kind) {
+  if (!supabase) {
+    const list = (DEMO_CINEMA_CHAT[id] = DEMO_CINEMA_CHAT[id] || [])
+    list.push({ id: Date.now(), name: name || 'Guest', body, kind, answered: false, created_at: new Date().toISOString() })
+    return 'ok'
+  }
+  const r = await supabase.rpc('cinema_post_chat', { p_showing: id, p_device: deviceId(), p_name: name || '', p_body: body, p_kind: kind || 'chat' })
+  return r.error ? 'error' : r.data
+}
+
+// Demo theater: times are set from when the page loads so every state can be tried.
+const DEMO_CINEMA_CHAT = {}
+const demoSeatSets = {}
+function demoSeats(id) { (demoSeatSets[id] = demoSeatSets[id] || new Set()).add(deviceId()) }
+const T0 = Date.now()
+const mk = (id, screen, fest, kind, title, filmIds, startOffsetSec, lobby, runtimeMin, extra = {}) => ({
+  id, screen_id: 'sc' + screen, screen_number: screen, screen_name: 'Screen ' + screen,
+  festival_id: fest.id, festival_slug: fest.slug, festival_name: fest.name,
+  kind, title, description: extra.description || 'A showing in the Festaview virtual theater.', poster_url: extra.poster_url || null, rating: extra.rating || null,
+  film_ids: filmIds, live_stream_url: kind === 'live' ? DEMO_TRAILER : null, preroll_url: extra.preroll_url || null, sponsor_name: extra.sponsor_name || null,
+  starts_at: new Date(T0 + startOffsetSec * 1000).toISOString(), lobby_minutes: lobby, runtime_min: runtimeMin, qa_minutes: extra.qa || 0,
+  ends_at: new Date(T0 + (startOffsetSec + (runtimeMin + (extra.qa || 0)) * 60) * 1000).toISOString(),
+  seats: extra.seats == null ? null : extra.seats, taken: extra.taken || 0, access: 'free', chat_enabled: true,
+})
+const DEMO_SHOWINGS = [
+  mk('cs1', 1, DEMO.festivals[0], 'film', 'The Sparrows Nesting', ['m0'], -30, 10, 3, { description: 'A film already in progress. Join late and you start at the live point.', rating: 'PG' }),
+  mk('cs2', 2, DEMO.festivals[1], 'program', 'Midnight Shorts Program', ['m3', 'm4'], 40, 10, 5, { description: 'Two horror shorts back to back. The lobby is open now.', preroll_url: DEMO_TRAILER, sponsor_name: 'Lighthouse Coffee', qa: 2 }),
+  mk('cs3', 3, DEMO.festivals[0], 'live', 'Live Q&A with the filmmakers', [], 20 * 60, 10, 20, { description: 'A live conversation. The lobby opens ten minutes early.' }),
+  mk('cs4', 1, DEMO.festivals[2], 'film', 'Seven Minutes', ['m5'], 24 * 3600, 10, 3, { description: 'Tomorrow at the same time.', seats: 100 }),
+  mk('cs5', 4, DEMO.festivals[2], 'film', 'Paper Moon', ['m6'], 2 * 3600, 10, 3, { description: 'This one is sold out.', seats: 2, taken: 2 }),
+]
+function demoCinema() {
+  const screens = [1, 2, 3, 4, 5, 6].map((n) => ({ id: 'sc' + n, number: n, name: 'Screen ' + n, active: true }))
+  const showings = DEMO_SHOWINGS.map((s) => ({ ...s, taken: s.taken + ((demoSeatSets[s.id] && demoSeatSets[s.id].size) || 0) }))
+  return { screens, showings }
+}
+function demoCinemaJoin(id) {
+  const s = DEMO_SHOWINGS.find((x) => x.id === id)
+  if (!s) return { status: 'not_found' }
+  const now = Date.now()
+  const start = new Date(s.starts_at).getTime()
+  const lobbyOpen = start - s.lobby_minutes * 60000
+  const end = start + (s.runtime_min + s.qa_minutes) * 60000
+  if (now < lobbyOpen) return { status: 'too_early', opens_at: new Date(lobbyOpen).toISOString(), starts_at: s.starts_at, server_now: now }
+  if (now > end) return { status: 'ended' }
+  const taken = s.taken + ((demoSeatSets[id] && demoSeatSets[id].size) || 0)
+  const mine = demoSeatSets[id] && demoSeatSets[id].has(deviceId())
+  if (!mine && s.seats != null && taken >= s.seats) return { status: 'full' }
+  demoSeats(id)
+  const films = s.film_ids.map((fid) => DEMO.films.find((m) => m.id === fid)).filter(Boolean).map((m) => ({ id: m.id, title: m.title, video_url: m.video_url || DEMO_TRAILER, poster_url: m.poster_url || null, duration_sec: m.duration_sec || 128, festival_id: m.festival_id }))
+  return {
+    status: 'ok', server_now: now, kind: s.kind, title: s.title, festival_id: s.festival_id, starts_at: s.starts_at, lobby_open: new Date(lobbyOpen).toISOString(), ends_at: new Date(end).toISOString(),
+    runtime_min: s.runtime_min, qa_minutes: s.qa_minutes, films, live_stream_url: s.live_stream_url, preroll_url: s.preroll_url, sponsor_name: s.sponsor_name, chat_enabled: true,
+  }
+}

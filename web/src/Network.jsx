@@ -271,6 +271,96 @@ function Inquiries({ note }) {
 }
 
 // Network owner console: Festaview-wide analytics, festival management, inquiries.
+// Owner controls for the virtual theater: booking rules, screens and approvals.
+function CinemaOwner({ data, note }) {
+  const [d, setD] = useState(null)
+  const [settings, setSettings] = useState(null)
+  const [newScreen, setNewScreen] = useState('')
+  const reload = useCallback(() => api.cinemaOwnerData().then((r) => { setD(r); setSettings(r.settings) }).catch((e) => note(e.message, true)), [note])
+  useEffect(() => { if (!api.isDemo) reload() }, [reload])
+  if (api.isDemo) return <p className="note pad">The theater controls need a connected database.</p>
+  if (!d || !settings) return <p className="note pad">Loading...</p>
+
+  const fest = (id) => (data.festivals.find((f) => f.id === id) || {}).name || 'Festival'
+  const screen = (id) => (d.screens.find((s) => s.id === id) || {}).name || 'Screen'
+  const when = (iso) => new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+  const pending = d.showings.filter((s) => s.status === 'pending')
+  const scheduled = d.showings.filter((s) => s.status === 'scheduled')
+
+  const saveSettings = async (e) => {
+    e.preventDefault()
+    try { await api.saveCinemaSettings({ ...settings, min_notice_hours: parseInt(settings.min_notice_hours, 10) || 0, max_upcoming: parseInt(settings.max_upcoming, 10) || 1 }); note('Theater rules saved.'); reload() } catch (x) { note(x.message, true) }
+  }
+  const approve = async (s, yes) => { try { await api.approveShowing(s.id, yes); note(yes ? 'Approved. It is on the marquee.' : 'Rejected.'); reload() } catch (x) { note(x.message, true) } }
+  const cancel = async (s) => { if (!window.confirm('Cancel "' + s.title + '"?')) return; try { await api.cancelShowing(s.id); note('Cancelled.'); reload() } catch (x) { note(x.message, true) } }
+  const addScreen = async () => {
+    const next = Math.max(0, ...d.screens.map((s) => s.number)) + 1
+    try { await api.addCinemaScreen(next, newScreen.trim() || 'Screen ' + next); setNewScreen(''); note('Screen added.'); reload() } catch (x) { note(x.message, true) }
+  }
+  const toggleScreen = async (s) => { try { await api.updateCinemaScreen(s.id, { active: !s.active }); reload() } catch (x) { note(x.message, true) } }
+
+  return (
+    <>
+      <div className="panel">
+        <h2>Booking rules</h2>
+        <form onSubmit={saveSettings}>
+          <label className="check"><input type="checkbox" checked={!!settings.require_approval} onChange={(e) => setSettings({ ...settings, require_approval: e.target.checked })} /> New showings from festivals wait for my approval (your own bookings are always approved)</label>
+          <div className="two">
+            <Field label="Minimum notice (hours)" hint="How far ahead a festival must book."><input value={settings.min_notice_hours} onChange={(e) => setSettings({ ...settings, min_notice_hours: e.target.value })} inputMode="numeric" /></Field>
+            <Field label="Most upcoming showings per festival"><input value={settings.max_upcoming} onChange={(e) => setSettings({ ...settings, max_upcoming: e.target.value })} inputMode="numeric" /></Field>
+          </div>
+          <button className="btn" type="submit">Save rules</button>
+        </form>
+      </div>
+
+      <div className="panel">
+        <h2>Waiting for approval ({pending.length})</h2>
+        <ul className="list">
+          {pending.length === 0 && <li><span className="note">Nothing is waiting.</span></li>}
+          {pending.map((s) => (
+            <li key={s.id}>
+              <div><strong>{s.title}</strong><small>{fest(s.festival_id)} | {screen(s.screen_id)} | {when(s.starts_at)} | {s.runtime_min} min</small></div>
+              <button type="button" className="btn" onClick={() => approve(s, true)}>Approve</button>
+              <button type="button" className="btn ghost danger" onClick={() => approve(s, false)}>Reject</button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="panel">
+        <h2>Screens</h2>
+        <ul className="list">
+          {d.screens.map((s) => (
+            <li key={s.id}>
+              <div><strong>{s.name}</strong><small>Screen {s.number}</small></div>
+              <span className={'pill ' + (s.active ? 'published' : 'draft')}>{s.active ? 'open' : 'closed'}</span>
+              <button type="button" className="btn ghost" onClick={() => toggleScreen(s)}>{s.active ? 'Close screen' : 'Open screen'}</button>
+            </li>
+          ))}
+        </ul>
+        <div className="inline-form">
+          <input placeholder="Name for the next screen (optional)" value={newScreen} onChange={(e) => setNewScreen(e.target.value)} />
+          <button type="button" className="btn ghost" onClick={addScreen}>Add a screen</button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>Upcoming showings ({scheduled.length})</h2>
+        <ul className="list">
+          {scheduled.length === 0 && <li><span className="note">No showings are scheduled.</span></li>}
+          {scheduled.map((s) => (
+            <li key={s.id}>
+              <div><strong>{s.title}</strong><small>{fest(s.festival_id)} | {screen(s.screen_id)} | {when(s.starts_at)}</small></div>
+              <a className="btn ghost" href={'/cinema/' + s.id}>View</a>
+              <button type="button" className="btn ghost danger" onClick={() => cancel(s)}>Cancel</button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </>
+  )
+}
+
 export default function Network() {
   const [session, setSession] = useState(undefined)
   const [ok, setOk] = useState(api.isDemo ? true : null)
@@ -313,7 +403,7 @@ export default function Network() {
         {api.isDemo && <span className="pill draft">Demo data</span>}
       </div>
       <nav className="tabs">
-        {[['analytics', 'Analytics'], ['festivals', 'Festivals'], ['inquiries', 'Inquiries']].map(([k, label]) => (
+        {[['analytics', 'Analytics'], ['festivals', 'Festivals'], ['cinema', 'Virtual theater'], ['inquiries', 'Inquiries']].map(([k, label]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsg(null) }}>{label}</button>
         ))}
       </nav>
@@ -326,6 +416,7 @@ export default function Network() {
       {!data && <p className="note pad">Loading...</p>}
       {data && tab === 'analytics' && <Analytics data={data} days={days} setDays={setDays} assume={assume} setAssume={setAssume} />}
       {data && tab === 'festivals' && <Manage data={data} reload={reload} note={note} />}
+      {data && tab === 'cinema' && <CinemaOwner data={data} note={note} />}
       {tab === 'inquiries' && <Inquiries note={note} />}
     </div>
   )

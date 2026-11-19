@@ -459,3 +459,78 @@ export async function createMyFestival(f) {
   if (r.error) throw r.error
   return r.data
 }
+
+// ---- virtual theater: booking (festivals) and owner controls ----
+const demoScreens = () => [1, 2, 3, 4, 5, 6].map((n) => ({ id: 'sc' + n, number: n, name: 'Screen ' + n, active: true }))
+
+export async function listCinemaScreens() {
+  if (isDemo) return demoScreens()
+  const r = await supabase.from('cinema_screens').select('*').eq('active', true).order('number')
+  if (r.error) throw r.error
+  return r.data
+}
+export async function listMyShowings(fid) {
+  if (isDemo) return load().showings || []
+  const r = await supabase.from('cinema_showings').select('*').eq('festival_id', fid).order('starts_at', { ascending: false }).limit(100)
+  if (r.error) throw r.error
+  return r.data
+}
+export async function showingSeatCounts(ids) {
+  if (isDemo || !ids.length) return {}
+  const r = await supabase.from('cinema_tickets').select('showing_id').in('showing_id', ids)
+  if (r.error) throw r.error
+  const out = {}
+  for (const t of r.data || []) out[t.showing_id] = (out[t.showing_id] || 0) + 1
+  return out
+}
+export async function bookShowing(a) {
+  if (isDemo) {
+    const s = load(); s.showings = s.showings || []
+    const start = new Date(a.starts_at).getTime()
+    const end = start + (a.runtime_min + a.qa) * 60000
+    const clash = s.showings.some((x) => x.screen_id === a.screen_id && x.status !== 'cancelled' && new Date(x.starts_at).getTime() - x.lobby_minutes * 60000 < end + 300000 && start - a.lobby * 60000 < new Date(x.starts_at).getTime() + (x.runtime_min + x.qa_minutes) * 60000 + 300000)
+    if (clash) throw new Error('That time overlaps another showing on this screen. Pick a different time or screen.')
+    s.showings.unshift({ id: uid(), festival_id: a.festival_id, screen_id: a.screen_id, kind: a.kind, title: a.title, starts_at: a.starts_at, lobby_minutes: a.lobby, runtime_min: a.runtime_min, qa_minutes: a.qa, seats: a.seats, status: 'scheduled' })
+    persist(s); return { status: 'scheduled' }
+  }
+  const r = await supabase.rpc('book_showing', {
+    p_festival: a.festival_id, p_screen: a.screen_id, p_kind: a.kind, p_title: a.title, p_description: a.description || null, p_poster: a.poster_url || null,
+    p_film_ids: a.film_ids || [], p_live_url: a.live_stream_url || null, p_preroll: a.preroll_url || null, p_sponsor: a.sponsor_name || null, p_rating: a.rating || null,
+    p_starts_at: a.starts_at, p_lobby: a.lobby, p_qa: a.qa, p_seats: a.seats === '' || a.seats == null ? null : a.seats, p_live_runtime: a.live_runtime || null,
+  })
+  if (r.error) throw r.error
+  return r.data
+}
+export async function cancelShowing(id) {
+  if (isDemo) { const s = load(); s.showings = (s.showings || []).map((x) => (x.id === id ? { ...x, status: 'cancelled' } : x)); persist(s); return }
+  const r = await supabase.rpc('cancel_showing', { p_id: id })
+  if (r.error) throw r.error
+}
+
+// owner only
+export async function cinemaOwnerData() {
+  const [st, sc, sh] = await Promise.all([
+    supabase.from('cinema_settings').select('*').eq('id', 1),
+    supabase.from('cinema_screens').select('*').order('number'),
+    supabase.from('cinema_showings').select('*').in('status', ['pending', 'scheduled']).gte('starts_at', new Date(Date.now() - 864e5).toISOString()).order('starts_at'),
+  ])
+  const err = st.error || sc.error || sh.error
+  if (err) throw err
+  return { settings: (st.data && st.data[0]) || { require_approval: true, min_notice_hours: 24, max_upcoming: 30 }, screens: sc.data || [], showings: sh.data || [] }
+}
+export async function saveCinemaSettings(s) {
+  const r = await supabase.from('cinema_settings').update({ require_approval: !!s.require_approval, min_notice_hours: s.min_notice_hours, max_upcoming: s.max_upcoming }).eq('id', 1)
+  if (r.error) throw r.error
+}
+export async function addCinemaScreen(number, name) {
+  const r = await supabase.from('cinema_screens').insert({ number, name })
+  if (r.error) throw r.error
+}
+export async function updateCinemaScreen(id, patch) {
+  const r = await supabase.from('cinema_screens').update(patch).eq('id', id)
+  if (r.error) throw r.error
+}
+export async function approveShowing(id, okFlag) {
+  const r = await supabase.rpc('approve_showing', { p_id: id, p_ok: okFlag })
+  if (r.error) throw r.error
+}

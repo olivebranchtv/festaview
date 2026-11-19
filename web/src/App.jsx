@@ -5,6 +5,7 @@ import { eventState } from './virtual.js'
 import { matchRoute, STATIC_PAGES } from './paths.js'
 import { usePath, installLinkHandler } from './router.js'
 import { useSeo } from './seo.js'
+import { CinemaPage, ShowingPage, NowShowingStrip } from './cinema.jsx'
 import { CONTACT_EMAIL } from './config.js'
 import {
   HomePage, FestivalsPage, FilmsPage, VirtualListPage, TvGuidePage, ChannelPage, LivePage, LiveFeedPage,
@@ -20,7 +21,7 @@ const VirtualRoom = lazy(() => import('./VirtualRoom.jsx'))
 function Header({ path }) {
   const [open, setOpen] = useState(false)
   useEffect(() => { setOpen(false) }, [path])
-  const links = [['/festivals', 'Festivals'], ['/films', 'Films'], ['/virtual', 'Virtual cinema'], ['/tv-guide', 'TV guide'], ['/live', 'Live'], ['/watch', 'Watch'], ['/for-festivals', 'For festivals']]
+  const links = [['/festivals', 'Festivals'], ['/films', 'Films'], ['/cinema', 'Virtual theater'], ['/virtual', 'Virtual cinema'], ['/tv-guide', 'TV guide'], ['/live', 'Live'], ['/watch', 'Watch'], ['/for-festivals', 'For festivals']]
   return (
     <header className="top">
       <a href="/" className="brand"><span className="mark" aria-hidden="true" />FESTAVIEW</a>
@@ -75,11 +76,13 @@ export default function App() {
   else if (route.name === 'about') page = <AboutPage />
   else if (route.name === 'forFestivals') page = <ForFestivalsPage />
   else if (route.name === 'watch') page = <WatchPage />
+  else if (route.name === 'cinema') page = <CinemaPage />
+  else if (route.name === 'showing') page = <ShowingPage id={route.id} />
   else if (error) page = <p className="note pad">{error}</p>
   else if (!data) page = <p className="note pad">Loading...</p>
   else {
     switch (route.name) {
-      case 'home': page = <HomePage data={data} />; break
+      case 'home': page = <HomePage data={data} theater={<NowShowingStrip />} />; break
       case 'festivals': page = <FestivalsPage data={data} />; break
       case 'festival': page = <FestivalPage data={data} slug={route.slug} />; break
       case 'films': page = <FilmsPage data={data} />; break

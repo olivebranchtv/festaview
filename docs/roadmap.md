@@ -69,3 +69,6 @@ New admin tab and public screening room: screenings, programs, live events; avai
 region rules (server-checked); sponsor pre-roll; chat and Q&A with moderation; email reservations; tickets and codes
 can cover an event. See docs/virtual-cinema.md. Migration 009_virtual.sql. Not included: DRM and forensic watermarking,
 reminder emails, TV apps for events.
+
+## Virtual Theater (phase 1 built)
+Numbered screens, scheduled showings, marquee at /cinema, synchronized room with late entry, local time zones, seat limits, festival booking tab, owner approvals. Needs supabase/migrations/012_cinema.sql. Plan and later phases: docs/virtual-theater-plan.md.

@@ -94,7 +94,7 @@ function HeroVisual({ festivals }) {
   )
 }
 
-export function HomePage({ data }) {
+export function HomePage({ data, theater }) {
   useTick(30000)
   useSeo({ title: 'Watch Film Festivals Online', description: SITE_DESCRIPTION, canonicalPath: '/' })
   const stats = { festivals: data.festivals.length, films: data.films.length, live: data.feeds.filter((f) => f.is_live || f.is_replay_loop).length }
@@ -125,6 +125,8 @@ export function HomePage({ data }) {
           <HeroVisual festivals={data.festivals} />
         </div>
       </section>
+
+      {theater}
 
       {events.length > 0 && (
         <section className="block">
