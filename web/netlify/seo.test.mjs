@@ -38,7 +38,7 @@ const base = '<!doctype html><html lang="en"><head><title>Festaview</title><meta
 
 const paths = [
   '/', '/festivals', '/festival/olive-branch', '/films', filmPath(data.films[0]), filmPath(data.films[1]), '/virtual', eventPath(data.events[0]), eventPath(data.events[1]),
-  '/cinema', cinemaPath(data.cinema[0]), cinemaPath(data.cinema[1]), '/tv-guide', '/channel/mix', '/channel/olive-branch', '/live', '/live/l1/olive-branch-live', '/watch', '/for-festivals', '/about',
+  '/cinema', cinemaPath(data.cinema[0]), cinemaPath(data.cinema[1]), '/watch-on-tv', '/tv-guide', '/channel/mix', '/channel/olive-branch', '/live', '/live/l1/olive-branch-live', '/watch', '/for-festivals', '/about',
 ]
 const count = (s, re) => (s.match(re) || []).length
 

@@ -2,6 +2,7 @@
 // data, and real crawlable HTML content. Used by the edge function (so Google, Bing and AI crawlers receive complete HTML
 // without running JavaScript), the sitemap and llms.txt. Pure functions: no network access except loadCatalog().
 import { SITE_NAME, SITE_URL, slugify, festivalPath, filmPath, eventPath, channelPath, liveFeedPath, cinemaPath, submitPath, matchRoute, STATIC_PAGES } from '../../src/paths.js'
+import { TVS, TV_NOTES, GENERAL_TIPS, optionsFor } from '../../src/tvHelpContent.js'
 import { FAQ, BENEFITS, SITE_DESCRIPTION, SITE_TAGLINE } from '../../src/siteContent.js'
 import { buildChannels } from '../../src/channels.js'
 import { eventState } from '../../src/virtual.js'
@@ -340,6 +341,17 @@ export function pageSeo(pathname, data, origin) {
         (state === 'open' ? '' : '<p>This festival is not accepting submissions right now.</p>') +
         cats.map((c) => '<h2>' + esc(c.name) + '</h2>' + (c.description ? '<p>' + esc(c.description) + '</p>' : '') + list(c.tiers.map((t) => esc(t.name) + ': ' + esc(feeMoney(t.fee_cents)) + (t.deadline ? ' until ' + esc(fmtDate(t.deadline)) : '')))).join('') +
         (f.submissions_closes_at ? '<p>Final deadline ' + esc(fmtDate(f.submissions_closes_at)) + '.</p>' : ''))
+      return seo
+    }
+    case 'watchOnTv': {
+      seo.title = 'How to Watch on Your TV: Roku, Samsung, LG and More'
+      seo.description = 'Step by step help to watch Festaview Cinemas on your TV. Cast or mirror from your phone or computer to Roku, Samsung, LG, Fire TV, Chromecast and Apple TV.'
+      const items = [['/', 'Home'], [null, 'Watch on your TV']]
+      seo.jsonld.push(breadcrumbLd(items))
+      seo.body = shell(crumbs(items) + '<h1>How to watch on your TV</h1><p>Festaview Cinemas plays in your web browser. You can put it on the big screen with casting, AirPlay, screen mirroring, the TV web browser or an HDMI cable.</p>' +
+        TVS.map((t) => '<h2>' + esc(t.name) + '</h2><p>' + esc(TV_NOTES[t.id]) + '</p>' + optionsFor(t.id, t.id === 'apple' || t.id === 'roku' ? 'iphone' : 'windows').slice(0, 2).map((o) => '<h3>' + esc(o.name) + '</h3>' + list(o.steps.map((x) => esc(x)))).join('')).join('') +
+        '<h2>Tips for a smooth show</h2>' + list(GENERAL_TIPS.map((x) => esc(x))) +
+        '<p>See the <a href="/cinema">showtimes</a>, <a href="/festivals">festivals</a> and <a href="/about">about Festaview</a>.</p>')
       return seo
     }
     case 'about': {

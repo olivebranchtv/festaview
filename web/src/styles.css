@@ -515,3 +515,16 @@ a.live-card.playable:hover { transform: translateY(-3px); }
 @media (max-width: 600px) { .two { grid-template-columns: 1fr; } }
 .table tr.on td { color: var(--gold); font-weight: 600; }
 .panel textarea, .panel select { width: 100%; }
+
+/* How to watch on your TV */
+.tvhelp .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 18px; }
+.tvhelp .chip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line, #2a2a3a); background: transparent; color: inherit; cursor: pointer; min-width: 9.5rem; }
+.tvhelp .chip small { opacity: 0.7; font-size: 0.8em; }
+.tvhelp .chip.on { border-color: var(--gold, #e6b34a); background: rgba(230, 179, 74, 0.12); }
+.tvhelp .chip:focus-visible { outline: 2px solid var(--gold, #e6b34a); outline-offset: 2px; }
+.tvhelp-note { margin: 4px 0 14px; padding: 12px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
+.tvhelp-opt { margin: 0 0 16px; }
+.tvhelp-opt h3 { margin: 0 0 6px; }
+.tvhelp-opt ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+.tvhelp.compact .chip { min-width: 0; padding: 8px 12px; }
+.linklike { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }

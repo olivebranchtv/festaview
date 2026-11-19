@@ -240,7 +240,7 @@ export function ShowingPage({ id }) {
             </div>
           )}
           {msg && <p className="error">{msg}</p>}
-          <p className="note small">Everyone watches at the same time. If you arrive late, you join at the live point. Times are shown in your time zone{zoneName() ? ' (' + zoneName() + ')' : ''}.</p>
+          <p className="note small">Everyone watches at the same time. If you arrive late, you join at the live point. Times are shown in your time zone{zoneName() ? ' (' + zoneName() + ')' : ''}. Want it on the big screen? <a href="/watch-on-tv">See how to watch on your TV</a>.</p>
         </div>
       </div>
     </article>

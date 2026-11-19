@@ -31,6 +31,7 @@ export const STATIC_PAGES = [
   ['/live', 'Live channels'],
   ['/watch', 'Watch on Roku and web'],
   ['/for-festivals', 'For film festivals'],
+  ['/watch-on-tv', 'Watch on your TV'],
   ['/about', 'About Festaview'],
 ]
 
@@ -61,6 +62,7 @@ export function matchRoute(pathname) {
       return seg.length === 2 || seg.length === 3 ? { name: 'liveFeed', id: b, slug: c } : null
     case 'watch': return seg.length === 1 ? { name: 'watch' } : null
     case 'for-festivals': return seg.length === 1 ? { name: 'forFestivals' } : null
+    case 'watch-on-tv': return seg.length === 1 ? { name: 'watchOnTv' } : null
     case 'about': return seg.length === 1 ? { name: 'about' } : null
     case 'admin': case 'network': case 'access': case 'filmmaker': return { name: a, private: true }
     case 'theater': return { name: 'theater', slug: b, private: true }

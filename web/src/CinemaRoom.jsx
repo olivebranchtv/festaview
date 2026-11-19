@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import { cinemaJoin, cinemaListChat, cinemaPostChat, logView } from './data.js'
 import { ChatPanel } from './VirtualRoom.jsx'
+import { TvGuide } from './tvHelp.jsx'
 import { loadCast, watchCast, requestCast, endCast, castLoad, castPosition, castSeek } from './cast.js'
 
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
@@ -36,6 +37,7 @@ export default function CinemaRoom({ showing, onLeave }) {
   const viewRef = useRef(null)
   const [cast, setCast] = useState({ available: false, on: false, name: '' })
   const [castMsg, setCastMsg] = useState('')
+  const [tvHelp, setTvHelp] = useState(false)
   const castOnRef = useRef(false)
   castOnRef.current = cast.on
   const airplay = typeof window !== 'undefined' && !!window.WebKitPlaybackTargetAvailabilityEvent
@@ -242,6 +244,7 @@ export default function CinemaRoom({ showing, onLeave }) {
           {view.phase === 'playing' && <span className="pill live">{late ? 'Joined late, live at ' + mmss(view.into) : 'Now showing'}</span>}
           {next && <small>Up next: {next.title}</small>}
           <span className="room-actions">
+            <button type="button" className="btn ghost small" aria-expanded={tvHelp} onClick={() => setTvHelp(!tvHelp)}>Watch on TV</button>
             {cast.available && <button type="button" className="btn ghost small" onClick={toggleCast}>{cast.on ? 'Stop casting' : 'Cast to TV'}</button>}
             {airplay && !cast.on && <button type="button" className="btn ghost small" onClick={showAirplay}>AirPlay</button>}
             <button type="button" className="btn ghost small" onClick={() => setMuted(!muted)}>{muted ? 'Unmute' : 'Mute'}</button>
@@ -249,7 +252,8 @@ export default function CinemaRoom({ showing, onLeave }) {
             <button type="button" className="btn ghost small" onClick={onLeave}>Leave</button>
           </span>
         </div>
-        {castMsg && <p className="error" role="alert">{castMsg}</p>}
+        {castMsg && <p className="error" role="alert">{castMsg} <button type="button" className="linklike" onClick={() => setTvHelp(true)}>Show me how</button></p>}
+        {tvHelp && <div className="panel"><TvGuide compact /><p className="note small"><a href="/watch-on-tv" target="_blank" rel="noreferrer">Open this help in its own page</a></p></div>}
         <h1 className="room-title">{info.title}</h1>
         <p className="note small">Showtime {fmtTime(info.starts_at)}. Everyone is watching at the same point, so there is no pause or rewind. To watch on a TV, use Cast to TV (Chrome) or AirPlay (Safari), or open this page in your smart TV's browser.</p>
       </div>
