@@ -361,6 +361,50 @@ function CinemaOwner({ data, note }) {
   )
 }
 
+// Owner-only: the box office cut. Every festival has a default rate (20%); any pass, ticket or showing can have its own.
+function TicketRates({ data, note }) {
+  const [d, setD] = useState(null)
+  const [edit, setEdit] = useState({})
+  const reload = useCallback(() => api.ticketRatesData().then(setD).catch((e) => note(e.message, true)), [note])
+  useEffect(() => { if (!api.isDemo) reload() }, [reload])
+  if (api.isDemo) return <p className="note pad">Ticket rates need a connected database.</p>
+  if (!d) return <p className="note pad">Loading...</p>
+  const fest = (id) => data.festivals.find((f) => f.id === id) || {}
+  const money = (c) => '$' + (c / 100).toFixed(2)
+  const rows = [
+    ...d.showings.map((s) => ({ key: 'showing:' + s.id, kind: 'showing', id: s.id, festival_id: s.festival_id, label: 'Theater showing: ' + s.title, price: s.price_cents, pct: s.fee_pct })),
+    ...d.products.map((p) => ({ key: 'product:' + p.id, kind: 'product', id: p.id, festival_id: p.festival_id, label: (p.event_id ? 'Event ticket: ' : p.film_id ? 'Film ticket: ' : 'Pass: ') + p.name, price: p.price_cents, pct: p.fee_pct })),
+  ]
+  const save = async (r) => {
+    const raw = edit[r.key]
+    const pct = raw === undefined ? undefined : String(raw).trim() === '' ? null : parseFloat(raw)
+    if (pct === undefined) return
+    if (pct !== null && !(pct >= 0 && pct <= 100)) { note('The rate must be between 0 and 100.', true); return }
+    try { await api.setTicketRate(r.kind, r.id, pct); note(pct === null ? 'Back to the festival default.' : 'Rate saved.'); setEdit((e) => { const n = { ...e }; delete n[r.key]; return n }); reload() } catch (x) { note(x.message, true) }
+  }
+  return (
+    <div className="panel">
+      <h2>Box office cut</h2>
+      <p className="note">Festaview keeps this percentage of every ticket price. Each festival has a default (set under Festivals, now 20%). Set a different rate for one title below, or leave it empty to use the festival's default. Card processing fees are separate and charged by Stripe. Festivals can see their rate but cannot change it.</p>
+      <ul className="list">
+        {rows.length === 0 && <li><span className="note">No paid titles yet.</span></li>}
+        {rows.map((r) => {
+          const f = fest(r.festival_id)
+          const eff = r.pct != null ? Number(r.pct) : Number(f.ticket_fee_pct || 0)
+          const shown = edit[r.key] !== undefined ? edit[r.key] : r.pct != null ? String(r.pct) : ''
+          return (
+            <li key={r.key}>
+              <div><strong>{r.label}</strong><small>{f.name || 'Festival'} | {money(r.price)} ticket | Festaview earns {money(Math.round(r.price * eff / 100))} per sale at {eff}%{r.pct == null ? ' (festival default)' : ''}</small></div>
+              <input value={shown} onChange={(e) => setEdit({ ...edit, [r.key]: e.target.value })} inputMode="decimal" placeholder={String(f.ticket_fee_pct ?? 20)} aria-label="Rate percent" style={{ width: '5rem' }} />%
+              <button type="button" className="btn ghost small" onClick={() => save(r)} disabled={edit[r.key] === undefined}>Save</button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 export default function Network() {
   const [session, setSession] = useState(undefined)
   const [ok, setOk] = useState(api.isDemo ? true : null)
@@ -403,7 +447,7 @@ export default function Network() {
         {api.isDemo && <span className="pill draft">Demo data</span>}
       </div>
       <nav className="tabs">
-        {[['analytics', 'Analytics'], ['festivals', 'Festivals'], ['cinema', 'Virtual theater'], ['inquiries', 'Inquiries']].map(([k, label]) => (
+        {[['analytics', 'Analytics'], ['festivals', 'Festivals'], ['cinema', 'Virtual theater'], ['rates', 'Box office cut'], ['inquiries', 'Inquiries']].map(([k, label]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsg(null) }}>{label}</button>
         ))}
       </nav>
@@ -416,6 +460,7 @@ export default function Network() {
       {!data && <p className="note pad">Loading...</p>}
       {data && tab === 'analytics' && <Analytics data={data} days={days} setDays={setDays} assume={assume} setAssume={setAssume} />}
       {data && tab === 'festivals' && <Manage data={data} reload={reload} note={note} />}
+      {data && tab === 'rates' && <TicketRates data={data} note={note} />}
       {data && tab === 'cinema' && <CinemaOwner data={data} note={note} />}
       {tab === 'inquiries' && <Inquiries note={note} />}
     </div>

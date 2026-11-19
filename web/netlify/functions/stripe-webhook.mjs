@@ -43,7 +43,8 @@ export default async (req) => {
       email: (s.customer_details && s.customer_details.email) || null,
       source: 'stripe',
       amount_cents: amount,
-      fee_cents: feeCents(amount, festival ? festival.ticket_fee_pct : 0),
+      // Box office cut: the title's own rate if the owner set one, otherwise the festival's default rate.
+      fee_cents: feeCents(amount, product.fee_pct != null ? product.fee_pct : festival ? festival.ticket_fee_pct : 0),
       stripe_session_id: s.id,
       expires_at: product.expires_at || null,
     },
@@ -55,10 +56,12 @@ export default async (req) => {
 
 // A virtual theater ticket. If the last seat was taken by someone else while this buyer was paying, refund them in full.
 async function sellTicket(s, showingId, e) {
-  const sr = await sb('cinema_showings?id=eq.' + showingId + '&select=festival_id')
+  const sr = await sb('cinema_showings?id=eq.' + showingId + '&select=festival_id,fee_pct')
   const fid = sr.ok && sr.data && sr.data[0] && sr.data[0].festival_id
   const fr = fid ? await sb('festivals?id=eq.' + fid + '&select=ticket_fee_pct') : null
-  const pct = fr && fr.ok && fr.data && fr.data[0] ? fr.data[0].ticket_fee_pct : 0
+  const festPct = fr && fr.ok && fr.data && fr.data[0] ? fr.data[0].ticket_fee_pct : 0
+  // Box office cut: the showing's own rate if the owner set one, otherwise the festival's default rate.
+  const pct = sr.ok && sr.data && sr.data[0] && sr.data[0].fee_pct != null ? sr.data[0].fee_pct : festPct
   const amount = Number(s.amount_total || 0)
   const res = await fetch(e.supabaseUrl + '/rest/v1/rpc/cinema_sell_ticket', {
     method: 'POST',

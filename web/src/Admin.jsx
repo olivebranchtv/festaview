@@ -1313,7 +1313,7 @@ function CinemaTab({ festival, setMsg }) {
             <Field label="Doors open (minutes early)"><input value={f.lobby} onChange={(e) => set('lobby')(e.target.value)} inputMode="numeric" /></Field>
             <Field label="Q&A after the film (minutes)"><input value={f.qa} onChange={(e) => set('qa')(e.target.value)} inputMode="numeric" /></Field>
             <Field label="Seats (leave empty for open seating)"><input value={f.seats} onChange={(e) => set('seats')(e.target.value)} inputMode="numeric" /></Field>
-            <Field label="Ticket price in dollars (empty = free)" hint={festival.payments_enabled ? 'Buyers pay by card. Festaview keeps its platform fee.' : 'Card payments must be turned on for your festival first.'}><input value={f.price} onChange={(e) => set('price')(e.target.value)} inputMode="decimal" placeholder="0.00" /></Field>
+            <Field label="Ticket price in dollars (empty = free)" hint={festival.payments_enabled ? 'Buyers pay by card. Festaview keeps its box office cut of ' + Number(festival.ticket_fee_pct || 0) + '% of each ticket (card processing is charged separately by Stripe).' : 'Card payments must be turned on for your festival first.'}><input value={f.price} onChange={(e) => set('price')(e.target.value)} inputMode="decimal" placeholder="0.00" /></Field>
           </div>
           <ImageField label="Poster" value={f.poster_url} onChange={set('poster_url')} festivalId={festival.id} onError={(m) => setMsg(m, true)} />
           <div className="two">

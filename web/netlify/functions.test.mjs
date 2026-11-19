@@ -190,6 +190,18 @@ r = await claim(new Request('https://site.example/x?session_id=cs_ticket_first12
 const cj = await r.json()
 ok('claim returns the ticket code and showing', cj.status === 'ready' && cj.ticketCode === 'FV-TEST-0000-0001' && cj.showingId === SH)
 
+
+// --- box office cut: a title's own rate beats the festival default
+const RATED = '66666666-6666-4666-8666-666666666666'
+db.cinema_showings.push({ id: RATED, title: 'Rated Show', price_cents: 1000, seats: null, fee_pct: 10, festival_id: 'f1', status: 'scheduled', starts_at: new Date(Date.now() + 3600e3).toISOString(), runtime_min: 90, qa_minutes: 0 })
+const brate = JSON.stringify({ type: 'checkout.session.completed', data: { object: { id: 'cs_rated_title12345', payment_intent: 'pi_r', payment_status: 'paid', amount_total: 1000, customer_details: { email: 'r@x.com' }, metadata: { showing_id: RATED, festival_id: 'f1' } } } })
+await post(webhook, brate, { 'stripe-signature': sign(brate) })
+ok('a showing with its own rate uses it, not the festival default', db.cinema_tickets.some((t) => t.stripe_session_id === 'cs_rated_title12345' && t.fee_cents === 100))
+db.products.push({ id: '77777777-7777-4777-8777-777777777777', festival_id: 'f1', film_id: null, name: 'Rated Pass', price_cents: 2000, currency: 'usd', active: true, fee_pct: 15 })
+const bprod = JSON.stringify({ type: 'checkout.session.completed', data: { object: { id: 'cs_rated_product123', payment_status: 'paid', amount_total: 2000, customer_details: { email: 'p@x.com' }, metadata: { product_id: '77777777-7777-4777-8777-777777777777', festival_id: 'f1' } } } })
+await post(webhook, bprod, { 'stripe-signature': sign(bprod) })
+ok('a product with its own rate uses it', db.entitlements.some((e) => e.stripe_session_id === 'cs_rated_product123' && e.fee_cents === 300))
+
 // --- filmmaker submissions (entry fees)
 const SUB = 'a1a1a1a1-aaaa-4aaa-8aaa-a1a1a1a1a1a1', SUBFREE = 'b2b2b2b2-bbbb-4bbb-8bbb-b2b2b2b2b2b2', SUBGONE = 'c3c3c3c3-cccc-4ccc-8ccc-c3c3c3c3c3c3'
 const festPct = db.festivals[0].ticket_fee_pct
