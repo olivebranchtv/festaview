@@ -58,3 +58,8 @@ hours-per-day chart, festival leaderboard, top films, viewing sources (website p
 network_overview, network_films, network_daily, network_sources) and view_events.source.
 Not built: Roku viewing reports (the Roku app does not log views), real ad revenue import, uptime/error monitoring,
 unique-viewer de-duplication across devices.
+
+## Roku viewing reports (2026-11-19)
+The Roku app records watch time (seconds, film or live feed, festival, device id from GetChannelClientId, source "roku")
+to view_events through ViewLogTask. Appears in festival analytics and the network dashboard. Untested on a device.
+Not built: ad impressions from Roku (needs the RAF ad task), de-duplicating devices across platforms.

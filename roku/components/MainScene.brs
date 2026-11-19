@@ -8,9 +8,17 @@ sub init()
   m.player = m.top.findNode("player")
   m.rows.observeField("rowItemSelected", "onItemSelected")
   m.player.observeField("state", "onPlayerState")
+  m.player.observeField("position", "onPosition")
   m.channels = []
   m.guideRow = -1
   m.nowChannel = invalid
+
+  ' Viewing reports: what is playing, where watching started, and the last position seen.
+  m.nowItem = invalid
+  m.watchStart = invalid
+  m.lastPos = 0
+  m.logTasks = []
+  m.deviceId = CreateObject("roDeviceInfo").GetChannelClientId()
 
   m.feedTask = CreateObject("roSGNode", "FeedTask")
   m.feedTask.observeField("result", "onFeedResult")
@@ -54,6 +62,7 @@ sub onFeedResult()
     for each f in live
       item = row.CreateChild("ContentNode")
       item.title = f.name
+      item.addFields({ festivalId: f.festival_id, liveId: f.id })
       item.hdPosterUrl = valueOr(f.poster_url, "")
       item.url = valueOr(f.stream_url, "")
       item.streamFormat = guessFormat(item.url)
@@ -69,6 +78,7 @@ sub onFeedResult()
       if film.festival_id = fest.id then
         item = row.CreateChild("ContentNode")
         item.title = film.title
+        item.addFields({ festivalId: film.festival_id, filmId: film.id })
         item.description = valueOr(film.synopsis, "")
         item.hdPosterUrl = valueOr(film.poster_url, "")
         item.url = valueOr(film.video_url, "")
@@ -100,7 +110,9 @@ sub onItemSelected()
   end if
   item = m.rows.content.GetChild(idx[0]).GetChild(idx[1])
   if item.url = "" then return
+  flushView()
   m.nowChannel = invalid
+  m.nowItem = { festivalId: item.festivalId, filmId: item.filmId, liveId: item.liveId }
   m.player.content = item
   m.player.visible = true
   m.player.setFocus(true)
@@ -109,7 +121,9 @@ end sub
 
 ' Plays one film of a channel, starting offset seconds in.
 sub startChannelItem(ch as object, index as integer, offset as integer)
+  flushView()
   it = ch.items[index]
+  m.nowItem = { festivalId: it.festivalId, filmId: it.filmId }
   c = CreateObject("roSGNode", "ContentNode")
   c.url = it.url
   c.streamFormat = it.format
@@ -141,9 +155,37 @@ sub advanceChannel()
   end if
 end sub
 
+sub onPosition()
+  m.lastPos = m.player.position
+end sub
+
+' Records how long the viewer actually watched, then forgets it so it is only sent once.
+sub flushView()
+  start = m.watchStart
+  m.watchStart = invalid
+  if start = invalid or m.nowItem = invalid then return
+  secs = Int(m.lastPos - start)
+  if secs < 1 then return
+  if secs > 21600 then secs = 21600
+  if m.nowItem.festivalId = invalid then return
+  payload = { festival_id: m.nowItem.festivalId, device_id: m.deviceId, seconds_watched: secs, source: "roku" }
+  if m.nowItem.filmId <> invalid then payload.film_id = m.nowItem.filmId
+  if m.nowItem.liveId <> invalid then payload.live_feed_id = m.nowItem.liveId
+  t = CreateObject("roSGNode", "ViewLogTask")
+  t.payload = payload
+  t.control = "RUN"
+  m.logTasks.Push(t)
+  if m.logTasks.Count() > 12 then m.logTasks.Shift()
+end sub
+
 sub onPlayerState()
   s = m.player.state
+  if s = "playing" and m.watchStart = invalid then
+    m.watchStart = m.player.position
+    m.lastPos = m.player.position
+  end if
   if s = "finished" then
+    flushView()
     if m.nowChannel <> invalid then
       advanceChannel()
     else
@@ -155,7 +197,9 @@ sub onPlayerState()
 end sub
 
 sub closePlayer()
+  flushView()
   m.nowChannel = invalid
+  m.nowItem = invalid
   m.player.control = "stop"
   m.player.visible = false
   m.rows.setFocus(true)

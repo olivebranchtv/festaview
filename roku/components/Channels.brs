@@ -74,7 +74,7 @@ function makeChannel(id as string, number as integer, name as string, films as o
   cycle = 0
   for each f in arrangeFilms(playable, order, id)
     d = channelDuration(f)
-    items.Push({ title: f.title, url: f.video_url, format: guessFormat(f.video_url), poster: valueOr(f.poster_url, ""), duration: d })
+    items.Push({ title: f.title, url: f.video_url, format: guessFormat(f.video_url), poster: valueOr(f.poster_url, ""), duration: d, filmId: f.id, festivalId: f.festival_id })
     cycle = cycle + d
   end for
   return { id: id, number: number, name: name, items: items, cycle: cycle }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ViewLogTask" extends="Task">
+  <script type="text/brightscript" uri="pkg:/components/Config.brs" />
+  <script type="text/brightscript" uri="pkg:/components/ViewLogTask.brs" />
+  <interface>
+    <field id="payload" type="assocarray" />
+  </interface>
+</component>

@@ -155,7 +155,7 @@ function Analytics({ data, days, setDays, assume, setAssume }) {
               <div className="srcbar-track"><i style={{ width: (Number(s.seconds) / srcTotal) * 100 + '%' }} /></div>
             </div>
           ))}
-          <p className="note small">The Roku app does not report viewing yet.</p>
+          {!data.sources.some((s) => s.source === 'roku') && <p className="note small">No Roku viewing recorded yet. It appears here once the Roku channel is in use.</p>}
         </div>
       </div>
 
