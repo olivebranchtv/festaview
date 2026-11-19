@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { loadData, castVote, submitInquiry } from './data.js'
+import { loadData, castVote, submitInquiry, unlockStream, storedCode, storeCode, startCheckout, claimAccess } from './data.js'
 import { buildChannels, nowOn, schedule, clock } from './channels.js'
 
 // Loaded on demand so the public home page stays light (video player, admin and owner console are separate chunks).
@@ -35,6 +35,7 @@ function FilmCard({ film, festival, onOpen }) {
     <button className="card" onClick={() => onOpen(film)}>
       <div className="poster" style={film.poster_url ? undefined : bg(festival && festival.brand_color)}>
         {film.poster_url ? <img src={film.poster_url} alt="" loading="lazy" /> : <span>{film.title}</span>}
+        {film.access === 'ticketed' && <span className="ticket-badge">Ticketed</span>}
       </div>
       <div className="card-title">{film.title}</div>
       <div className="card-meta">
@@ -107,28 +108,83 @@ function InquiryForm() {
   )
 }
 
-function FilmModal({ film, festival, onClose, startMode }) {
+function formatPrice(p) {
+  try { return (p.price_cents / 100).toLocaleString(undefined, { style: 'currency', currency: (p.currency || 'usd').toUpperCase() }) } catch { return '$' + (p.price_cents / 100).toFixed(2) }
+}
+
+// Shown instead of the film when it is ticketed: enter an access code, or buy a pass or ticket.
+function AccessPanel({ film, festival, products, onUnlocked }) {
+  const [code, setCode] = useState('')
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+  const mine = (products || []).filter((p) => p.festival_id === film.festival_id && (!p.film_id || p.film_id === film.id))
+  const unlock = async (e) => {
+    e.preventDefault()
+    setBusy(true); setMsg('')
+    const url = await unlockStream(film.id, code)
+    setBusy(false)
+    if (url) { storeCode(film.festival_id, code.trim().toUpperCase()); onUnlocked(url) } else setMsg('That code did not work for this film.')
+  }
+  const buy = async (p) => {
+    setMsg('')
+    const r = await startCheckout(p.id)
+    if (r.ok) window.location.href = r.url; else setMsg(r.message)
+  }
+  return (
+    <div className="access">
+      <h3>This is a ticketed screening</h3>
+      {festival && festival.payments_enabled && mine.length > 0 && (
+        <div className="products">
+          {mine.map((p) => (
+            <div key={p.id} className="product">
+              <div><strong>{p.name}</strong>{p.description && <small>{p.description}</small>}</div>
+              <button className="btn" onClick={() => buy(p)}>{formatPrice(p)}</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {festival && !festival.payments_enabled && festival.passes_url && (
+        <p><a className="btn" href={festival.passes_url} target="_blank" rel="noreferrer">Get passes or tickets</a></p>
+      )}
+      <form className="inline-form" onSubmit={unlock}>
+        <input placeholder="Have an access code?" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Access code" />
+        <button className="btn ghost" type="submit" disabled={busy || !code.trim()}>{busy ? 'Checking...' : 'Unlock'}</button>
+      </form>
+      {msg && <p className="error">{msg}</p>}
+    </div>
+  )
+}
+
+function FilmModal({ film, festival, onClose, startMode, products }) {
   const [mode, setMode] = useState(startMode || 'film')
+  const [stream, setStream] = useState(film.video_url || '')
+  const locked = film.access === 'ticketed' && !stream
   useEffect(() => {
     const on = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
   }, [onClose])
+  // A code entered earlier on this device unlocks the film automatically.
+  useEffect(() => {
+    if (film.access !== 'ticketed' || film.video_url) return
+    const c = storedCode(film.festival_id)
+    if (c) unlockStream(film.id, c).then((u) => { if (u) setStream(u) })
+  }, [film.id]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={film.title}>
-        {film.video_url || film.trailer_url ? (
+        {stream || film.trailer_url ? (
           <>
-            {film.video_url && film.trailer_url && (
+            {stream && film.trailer_url && (
               <div className="modes">
                 <button className={mode === 'film' ? 'on' : ''} onClick={() => setMode('film')}>Film</button>
                 <button className={mode === 'trailer' ? 'on' : ''} onClick={() => setMode('trailer')}>Trailer</button>
               </div>
             )}
             <Suspense fallback={<div className="modal-art" />}>
-              {mode === 'trailer' || !film.video_url
+              {mode === 'trailer' || !stream
                 ? <Player key="trailer" film={{ ...film, video_url: film.trailer_url, captions_url: null }} track={false} />
-                : <Player key="film" film={film} track={!film.live} />}
+                : <Player key="film" film={{ ...film, video_url: stream }} track={!film.live} />}
             </Suspense>
           </>
         ) : (
@@ -145,11 +201,12 @@ function FilmModal({ film, festival, onClose, startMode }) {
           {film.director && <p className="meta">Directed by {film.director}</p>}
           {festival && <p className="meta">Official Selection, {festival.name}</p>}
           <p>{film.synopsis || 'Synopsis coming soon.'}</p>
+          {locked && <AccessPanel film={film} festival={festival} products={products} onUnlocked={(u) => { setStream(u); setMode('film') }} />}
           <div className="actions">
-            <RokuButton />
+            {!locked && film.access !== 'ticketed' && <RokuButton />}
             {festival && festival.voting_open && !film.live && <VoteButton film={film} />}
           </div>
-          <p className="note small">Also available on the Festaview Roku channel.</p>
+          {film.access !== 'ticketed' && <p className="note small">Also available on the Festaview Roku channel.</p>}
         </div>
       </div>
     </div>
@@ -512,6 +569,87 @@ function fmtDates(a, b) {
 }
 
 // A festival's own landing page: branded hero, spotlight film, about, live, schedule, theaters and the full selection.
+// Passes and tickets for one festival, plus a box to enter an access code.
+function PassesSection({ fest, products, ticketed }) {
+  const [msg, setMsg] = useState('')
+  const [code, setCode] = useState('')
+  const [ok, setOk] = useState(false)
+  const buy = async (p) => {
+    setMsg('')
+    const r = await startCheckout(p.id)
+    if (r.ok) window.location.href = r.url; else setMsg(r.message)
+  }
+  const apply = async (e) => {
+    e.preventDefault()
+    setMsg(''); setOk(false)
+    const c = code.trim().toUpperCase()
+    if (ticketed.length) {
+      const results = await Promise.all(ticketed.map((m) => unlockStream(m.id, c)))
+      if (!results.some(Boolean)) { setMsg('That code did not work.'); return }
+    }
+    storeCode(fest.id, c)
+    setOk(true)
+  }
+  return (
+    <section id="passes" className="block">
+      <h2>Passes and tickets</h2>
+      {products.length > 0 && (
+        <div className="products wide">
+          {products.map((p) => (
+            <div key={p.id} className="product">
+              <div><strong>{p.name}</strong>{p.description && <small>{p.description}</small>}{p.film_id && <small>One film</small>}</div>
+              {fest.payments_enabled ? <button className="btn" onClick={() => buy(p)}>{formatPrice(p)}</button> : <span className="price">{formatPrice(p)}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {!fest.payments_enabled && fest.passes_url && <p><a className="btn" href={fest.passes_url} target="_blank" rel="noreferrer">Get passes or tickets</a></p>}
+      <form className="inline-form" onSubmit={apply}>
+        <input placeholder="Have an access code?" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Access code" />
+        <button className="btn ghost" type="submit" disabled={!code.trim()}>Apply code</button>
+      </form>
+      {msg && <p className="error">{msg}</p>}
+      {ok && <p className="ok">Code accepted. Ticketed films are unlocked on this device.</p>}
+    </section>
+  )
+}
+
+// Shown after a card payment: fetches the access code the payment created and remembers it on this device.
+function AccessClaim({ hash }) {
+  const sid = new URLSearchParams((hash.split('?')[1]) || '').get('session_id')
+  const [r, setR] = useState({ status: 'pending' })
+  useEffect(() => {
+    if (!sid) return undefined
+    let stop = false
+    let tries = 0
+    const tick = async () => {
+      const j = await claimAccess(sid)
+      if (stop) return
+      if (j.status === 'ready') { storeCode(j.festivalId, j.code); setR(j); return }
+      tries += 1
+      if (tries < 12) setTimeout(tick, 2500); else setR({ status: 'timeout' })
+    }
+    tick()
+    return () => { stop = true }
+  }, [sid])
+  return (
+    <section className="block claim">
+      <h2>Your access</h2>
+      {!sid && <p className="note">This page needs a payment reference. <a href="#/">Back to Festaview</a></p>}
+      {sid && r.status === 'pending' && <p className="note">Confirming your payment...</p>}
+      {r.status === 'ready' && (
+        <>
+          <p className="ok">Payment received. Your access code:</p>
+          <p className="code">{r.code}</p>
+          <p className="note">Keep this code. It is already saved on this device, and you can enter it on any device to watch.</p>
+          {r.festivalSlug && <p><a className="btn" href={'#/festival/' + r.festivalSlug}>Go to the festival</a></p>}
+        </>
+      )}
+      {(r.status === 'timeout' || r.status === 'error') && <p className="error">We could not confirm your payment yet. If you were charged, contact the festival with your receipt.</p>}
+    </section>
+  )
+}
+
 function Festival({ data, slug, onOpen, onChannel }) {
   useTick(30000)
   const [genre, setGenre] = useState('')
@@ -533,8 +671,11 @@ function Festival({ data, slug, onOpen, onChannel }) {
   const totalMin = films.reduce((a, m) => a + (Number(m.runtime_min) || 0), 0)
   const dates = fmtDates(fest.starts_on, fest.ends_on)
   const to = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  const fProducts = (data.products || []).filter((p) => p.festival_id === fest.id)
+  const ticketedFilms = films.filter((m) => m.access === 'ticketed')
+  const showPasses = fProducts.length > 0 || ticketedFilms.length > 0 || !!fest.passes_url
   const chan = buildChannels(data).find((c) => c.festivalId === fest.id)
-  const nav = [['about', 'About'], chan ? ['channel', 'Channel'] : null, films.length ? ['selection', 'Films'] : null, feeds.length ? ['live', 'Live'] : null, sched.length ? ['schedule', 'Schedule'] : null, theaterShows.length ? ['theaters', 'In theaters'] : null].filter(Boolean)
+  const nav = [['about', 'About'], showPasses ? ['passes', 'Passes'] : null, chan ? ['channel', 'Channel'] : null, films.length ? ['selection', 'Films'] : null, feeds.length ? ['live', 'Live'] : null, sched.length ? ['schedule', 'Schedule'] : null, theaterShows.length ? ['theaters', 'In theaters'] : null].filter(Boolean)
   const meta = (m) => [m.year, m.runtime_min ? m.runtime_min + ' min' : null, m.genre, m.rating].filter(Boolean).join('  |  ')
 
   return (
@@ -587,6 +728,8 @@ function Festival({ data, slug, onOpen, onChannel }) {
           </div>
         </section>
       )}
+
+      {showPasses && <PassesSection fest={fest} products={fProducts} ticketed={ticketedFilms} />}
 
       {chan && (
         <section id="channel" className="block">
@@ -714,7 +857,8 @@ export default function App() {
   const isAdmin = hash.startsWith('#/admin')
   const isNetwork = hash.startsWith('#/network')
   const isTheater = hash.startsWith('#/theater')
-  const isPublic = !isAdmin && !isNetwork && !isTheater
+  const isAccess = hash.startsWith('#/access')
+  const isPublic = !isAdmin && !isNetwork && !isTheater && !isAccess
 
   const go = (id) => {
     const scroll = () => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }) }
@@ -734,14 +878,15 @@ export default function App() {
           {isNetwork && <div className="wrap-admin"><Network /></div>}
           {isTheater && <Theater slug={decodeURIComponent(hash.replace('#/theater/', ''))} />}
         </Suspense>
+        {isAccess && <AccessClaim hash={hash} />}
         {isPublic && error && <p className="note pad">{error}</p>}
         {isPublic && !data && !error && <p className="note pad">Loading...</p>}
         {isPublic && data && data.demo && <p className="banner">Demo content. Connect Supabase to show real festivals.</p>}
         {isPublic && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} onChannel={setChannel} /> : <Hub data={data} go={go} onOpen={openFilm} onChannel={setChannel} />)}
       </main>
-      {isPublic && <Footer />}
+      {(isPublic || isAccess) && <Footer />}
       {channel && data && <Suspense fallback={null}><ChannelPlayer channelId={channel} data={data} onClose={() => setChannel(null)} /></Suspense>}
-      {open && <FilmModal key={open.id + openMode} film={open} festival={openFest} startMode={openMode} onClose={() => setOpen(null)} />}
+      {open && <FilmModal key={open.id + openMode} film={open} festival={openFest} startMode={openMode} products={data ? data.products : []} onClose={() => setOpen(null)} />}
     </div>
   )
 }

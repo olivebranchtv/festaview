@@ -372,3 +372,19 @@ button.live-card.playable:hover { transform: translateY(-3px); }
 .issues li { margin: 6px 0; }
 .banner-warn { background: #2a2210; color: var(--gold); border-radius: 10px; padding: 12px 16px; }
 @media (max-width: 800px) { .two-col { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- paid access ---------- */
+.ticket-badge { position: absolute; top: 8px; left: 8px; background: var(--gold); color: #14110a; font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; z-index: 1; }
+.access { background: #10101a; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 14px 0; }
+.access h3 { margin: 0 0 10px; font-size: 16px; }
+.products { display: grid; gap: 10px; margin: 10px 0 14px; }
+.products.wide { max-width: 640px; }
+.product { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.product small { display: block; color: var(--muted); }
+.product .price { font-weight: 700; color: var(--gold); }
+.claim { max-width: 640px; padding-top: 56px; }
+.claim .code { font-size: 32px; font-weight: 800; letter-spacing: 3px; color: var(--gold); background: var(--panel); border: 1px dashed var(--gold); border-radius: 12px; padding: 18px; text-align: center; user-select: all; }
+
+.codes { background: #0e0e17; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 0 0 10px; max-height: 220px; overflow: auto; color: var(--gold); user-select: all; }
+.paymini { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+.paymini input[type="text"], .paymini input:not([type]) { width: 64px; padding: 6px 8px; }

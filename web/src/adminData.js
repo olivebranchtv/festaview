@@ -80,9 +80,15 @@ export async function saveFilm(fid, film) {
   }
   const { id, ...rest } = film
   const row = clean(rest)
-  const r = id
-    ? await supabase.from('films').update(row).eq('id', id)
-    : await supabase.from('films').insert({ ...row, festival_id: fid })
+  const write = (rw) => (id
+    ? supabase.from('films').update(rw).eq('id', id)
+    : supabase.from('films').insert({ ...rw, festival_id: fid }))
+  let r = await write(row)
+  // If the paid-access SQL has not been run yet, saving still works without the new "access" setting.
+  if (r.error && 'access' in row && /access/i.test(r.error.message || '')) {
+    const { access, ...rest } = row
+    r = await write(rest)
+  }
   if (r.error) throw r.error
 }
 export async function deleteFilm(id) {
@@ -337,4 +343,57 @@ export async function networkData(days) {
     inquiries: (inq.data || []).length,
     missingSql: [tot, ov, fs, dy, src].some((r) => r.error),
   }
+}
+
+// ---- paid access: products, access codes, sales ----
+export async function listProducts(fid) {
+  if (isDemo) return load().products || []
+  const r = await supabase.from('products').select('*').eq('festival_id', fid).order('created_at')
+  if (r.error) throw r.error
+  return r.data
+}
+export async function saveProduct(fid, p) {
+  if (isDemo) { const s = load(); s.products = s.products || []; s.products.push({ ...p, id: uid(), festival_id: fid, active: true }); persist(s); return }
+  const r = await supabase.from('products').insert({ ...clean(p), festival_id: fid })
+  if (r.error) throw r.error
+}
+export async function setProductActive(id, active) {
+  if (isDemo) { const s = load(); s.products = (s.products || []).map((x) => (x.id === id ? { ...x, active } : x)); persist(s); return }
+  const r = await supabase.from('products').update({ active }).eq('id', id)
+  if (r.error) throw r.error
+}
+export async function deleteProduct(id) {
+  if (isDemo) { const s = load(); s.products = (s.products || []).filter((x) => x.id !== id); persist(s); return }
+  const r = await supabase.from('products').delete().eq('id', id)
+  if (r.error) throw r.error
+}
+export async function listEntitlements(fid) {
+  if (isDemo) return load().entitlements || []
+  const r = await supabase.from('entitlements').select('*').eq('festival_id', fid).order('created_at', { ascending: false }).limit(500)
+  if (r.error) throw r.error
+  return r.data
+}
+export async function revokeEntitlement(id) {
+  if (isDemo) { const s = load(); s.entitlements = (s.entitlements || []).map((x) => (x.id === id ? { ...x, status: 'revoked' } : x)); persist(s); return }
+  const r = await supabase.from('entitlements').update({ status: 'revoked' }).eq('id', id)
+  if (r.error) throw r.error
+}
+export async function createCompCodes(fid, count, filmId, note, expiresAt) {
+  if (isDemo) {
+    const s = load(); s.entitlements = s.entitlements || []
+    const codes = []
+    for (let i = 0; i < count; i++) {
+      const code = 'FV-' + Math.random().toString(16).slice(2, 6).toUpperCase() + '-' + Math.random().toString(16).slice(2, 6).toUpperCase() + '-' + Math.random().toString(16).slice(2, 6).toUpperCase()
+      s.entitlements.unshift({ id: uid(), festival_id: fid, film_id: filmId || null, code, note, source: 'comp', status: 'active', amount_cents: 0, fee_cents: 0, created_at: new Date().toISOString() })
+      codes.push(code)
+    }
+    persist(s); return codes
+  }
+  const r = await supabase.rpc('create_comp_codes', { p_festival: fid, p_count: count, p_film: filmId || null, p_note: note || null, p_expires: expiresAt || null })
+  if (r.error) throw r.error
+  return r.data || []
+}
+export async function setFestivalPayments(id, enabled, feePct) {
+  const r = await supabase.from('festivals').update({ payments_enabled: enabled, ticket_fee_pct: feePct }).eq('id', id)
+  if (r.error) throw r.error
 }

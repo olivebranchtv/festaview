@@ -7,7 +7,7 @@ const num = (v) => (v === '' || v == null ? '' : parseInt(v, 10) || '')
 
 const EMPTY_FILM = {
   title: '', synopsis: '', director: '', year: '', runtime_min: '', country: '', language: '', genre: '', rating: '',
-  poster_url: '', video_url: '', trailer_url: '', captions_url: '', duration_sec: '', status: 'draft',
+  poster_url: '', video_url: '', trailer_url: '', captions_url: '', duration_sec: '', access: 'free', status: 'draft',
   premiere_at: '', available_from: '', available_until: '',
 }
 const EMPTY_FEED = { name: '', stream_url: '', poster_url: '', is_live: false, is_replay_loop: true }
@@ -198,6 +198,12 @@ function FilmsTab({ festival, setMsg }) {
         </div>
         {edit.id && <FilmmakerShares film={edit} setMsg={setMsg} />}
         {edit.id && <ScreeningPackage film={edit} setMsg={setMsg} />}
+        <Field label="Who can watch" hint="Ticketed films are locked: the video link is hidden until a viewer has a valid access code (bought or given by you under Access and sales). Ticketed films do not play on the Roku app or in automatic channels.">
+          <select value={edit.access || 'free'} onChange={(e) => set('access')(e.target.value)}>
+            <option value="free">Everyone (free, supported by ads)</option>
+            <option value="ticketed">Ticketed (access code required)</option>
+          </select>
+        </Field>
         <Field label="Status">
           <select value={edit.status} onChange={(e) => set('status')(e.target.value)}>
             <option value="draft">Draft (hidden)</option>
@@ -733,6 +739,150 @@ function Analytics({ festival, setMsg }) {
   )
 }
 
+// Passes, tickets, access codes and sales for one festival.
+function AccessTab({ festival, setMsg }) {
+  const [products, setProducts] = useState([])
+  const [films, setFilms] = useState([])
+  const [ents, setEnts] = useState([])
+  const [p, setP] = useState({ name: '', description: '', price: '', film_id: '' })
+  const [c, setC] = useState({ count: '5', film_id: '', note: '', expires: '' })
+  const [fresh, setFresh] = useState([])
+
+  const refresh = useCallback(async () => {
+    try {
+      const [pr, fl, en] = await Promise.all([api.listProducts(festival.id), api.listFilms(festival.id), api.listEntitlements(festival.id)])
+      setProducts(pr); setFilms(fl); setEnts(en)
+    } catch (e) { setMsg(e.message, true) }
+  }, [festival.id, setMsg])
+  useEffect(() => { refresh() }, [refresh])
+
+  const filmName = (id) => { const f = films.find((x) => x.id === id); return f ? f.title : 'All ticketed films' }
+  const money2 = (cents) => '$' + (Number(cents || 0) / 100).toFixed(2)
+
+  const addProduct = async () => {
+    const price = parseFloat(p.price)
+    if (!p.name || !(price >= 0)) { setMsg('Enter a name and a price (0 or more).', true); return }
+    try {
+      await api.saveProduct(festival.id, { name: p.name, description: p.description, price_cents: Math.round(price * 100), film_id: p.film_id, currency: 'usd' })
+      setP({ name: '', description: '', price: '', film_id: '' }); setMsg('Added.'); refresh()
+    } catch (x) { setMsg(x.message, true) }
+  }
+  const toggle = async (x) => { try { await api.setProductActive(x.id, !x.active); refresh() } catch (e) { setMsg(e.message, true) } }
+  const removeProduct = async (x) => {
+    if (!window.confirm('Delete "' + x.name + '"? Codes already sold keep working.')) return
+    try { await api.deleteProduct(x.id); refresh() } catch (e) { setMsg(e.message, true) }
+  }
+  const makeCodes = async () => {
+    const n = parseInt(c.count, 10)
+    if (!(n >= 1 && n <= 200)) { setMsg('Choose between 1 and 200 codes.', true); return }
+    try {
+      const codes = await api.createCompCodes(festival.id, n, c.film_id, c.note, c.expires ? fromLocal(c.expires) : '')
+      setFresh(codes); setMsg(codes.length + ' code(s) created. Copy them now or find them in the list below.'); refresh()
+    } catch (x) { setMsg(x.message, true) }
+  }
+  const revoke = async (x) => {
+    if (!window.confirm('Revoke code ' + x.code + '? It will stop working.')) return
+    try { await api.revokeEntitlement(x.id); refresh() } catch (e) { setMsg(e.message, true) }
+  }
+
+  const paid = ents.filter((e) => e.source === 'stripe' && e.status === 'active')
+  const gross = paid.reduce((a, e) => a + Number(e.amount_cents || 0), 0)
+  const fees = paid.reduce((a, e) => a + Number(e.fee_cents || 0), 0)
+  const ticketedCount = films.filter((f) => f.access === 'ticketed').length
+
+  return (
+    <div>
+      <div className="panel">
+        <h2>Card payments</h2>
+        <p className="note">
+          {festival.payments_enabled
+            ? 'Card payments are ON for your festival. Festaview fee on paid sales: ' + Number(festival.ticket_fee_pct || 0) + '%.'
+            : 'Card payments are OFF. Festaview switches them on once your payout details are set up. Until then you can sell through your own ticketing link (Festival page tab) and give out access codes below.'}
+        </p>
+        <p className="note small">{ticketedCount} of your films are set to Ticketed. Set this on each film under the Films tab.</p>
+      </div>
+
+      <div className="panel">
+        <h2>Passes and tickets</h2>
+        <ul className="list">
+          {products.length === 0 && <li><span className="note">Nothing for sale yet.</span></li>}
+          {products.map((x) => (
+            <li key={x.id}>
+              <div><strong>{x.name}</strong><small>{money2(x.price_cents)} | {x.film_id ? filmName(x.film_id) : 'All ticketed films'}{x.description ? ' | ' + x.description : ''}</small></div>
+              <span className={'pill ' + (x.active ? 'published' : 'draft')}>{x.active ? 'on sale' : 'hidden'}</span>
+              <button type="button" className="btn ghost" onClick={() => toggle(x)}>{x.active ? 'Hide' : 'Show'}</button>
+              <button type="button" className="btn ghost danger" onClick={() => removeProduct(x)}>Delete</button>
+            </li>
+          ))}
+        </ul>
+        <div className="two">
+          <Field label="Name (e.g. Festival Pass)"><input value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} /></Field>
+          <Field label="Price in dollars"><input value={p.price} inputMode="decimal" onChange={(e) => setP({ ...p, price: e.target.value })} /></Field>
+          <Field label="Covers">
+            <select value={p.film_id} onChange={(e) => setP({ ...p, film_id: e.target.value })}>
+              <option value="">All ticketed films (a pass)</option>
+              {films.filter((f) => f.access === 'ticketed').map((f) => <option key={f.id} value={f.id}>{f.title} (one film)</option>)}
+            </select>
+          </Field>
+          <Field label="Short description"><input value={p.description} onChange={(e) => setP({ ...p, description: e.target.value })} /></Field>
+        </div>
+        <button type="button" className="btn" onClick={addProduct}>Add</button>
+      </div>
+
+      <div className="panel">
+        <h2>Free access codes</h2>
+        <p className="note small">For press, jurors, guests and giveaways. Viewers enter the code on your festival page or on a locked film.</p>
+        <div className="two">
+          <Field label="How many codes"><input value={c.count} inputMode="numeric" onChange={(e) => setC({ ...c, count: e.target.value })} /></Field>
+          <Field label="Works for">
+            <select value={c.film_id} onChange={(e) => setC({ ...c, film_id: e.target.value })}>
+              <option value="">All ticketed films</option>
+              {films.filter((f) => f.access === 'ticketed').map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
+            </select>
+          </Field>
+          <Field label="Note (who is it for)"><input value={c.note} onChange={(e) => setC({ ...c, note: e.target.value })} /></Field>
+          <Field label="Expires (optional)"><input type="datetime-local" value={c.expires} onChange={(e) => setC({ ...c, expires: e.target.value })} /></Field>
+        </div>
+        <button type="button" className="btn" onClick={makeCodes}>Create codes</button>
+        {fresh.length > 0 && (
+          <div className="subpanel">
+            <h3>New codes</h3>
+            <pre className="codes">{fresh.join('\n')}</pre>
+            <button type="button" className="btn ghost" onClick={() => { try { navigator.clipboard.writeText(fresh.join('\n')) } catch { /* ignore */ } }}>Copy all</button>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h2>Sales and access</h2>
+        <div className="kpis">
+          <div className="kpi"><span>Paid sales</span><strong>{paid.length}</strong><small>card purchases</small></div>
+          <div className="kpi"><span>Gross</span><strong>{money2(gross)}</strong><small>before fees</small></div>
+          <div className="kpi"><span>Festaview fee</span><strong>{money2(fees)}</strong><small>on paid sales</small></div>
+          <div className="kpi"><span>Net to festival</span><strong>{money2(gross - fees)}</strong><small>paid out by Festaview</small></div>
+        </div>
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Code</th><th>Type</th><th>For</th><th>Who</th><th>Amount</th><th>Status</th><th /></tr></thead>
+            <tbody>
+              {ents.length === 0 && <tr><td colSpan={7} className="note">No codes or sales yet.</td></tr>}
+              {ents.map((e) => (
+                <tr key={e.id}>
+                  <td>{e.code}</td><td>{e.source === 'stripe' ? 'Purchase' : 'Free code'}</td><td>{e.film_id ? filmName(e.film_id) : 'All ticketed'}</td>
+                  <td>{e.email || e.note || ''}</td><td>{money2(e.amount_cents)}</td>
+                  <td><span className={'pill ' + (e.status === 'active' ? 'published' : 'draft')}>{e.status}</span></td>
+                  <td>{e.status === 'active' && <button type="button" className="btn ghost danger" onClick={() => revoke(e)}>Revoke</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="note small">Payouts to festivals are handled by Festaview outside this screen for now. Refunds: revoke the code here, then refund the buyer from the payment dashboard.</p>
+      </div>
+    </div>
+  )
+}
+
 export default function Admin() {
   const [session, setSession] = useState(undefined)
   const [festivals, setFestivals] = useState(null)
@@ -773,13 +923,14 @@ export default function Admin() {
             </select>
           )}
           <nav className="tabs">
-            {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
+            {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
               <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsgState(null) }}>{label}</button>
             ))}
           </nav>
           {tab === 'films' && <FilmsTab festival={current} setMsg={setMsg} />}
           {tab === 'live' && <LiveTab festival={current} setMsg={setMsg} />}
           {tab === 'screenings' && <ScreeningsTab festival={current} setMsg={setMsg} />}
+          {tab === 'access' && <AccessTab festival={current} setMsg={setMsg} />}
           {tab === 'analytics' && <Analytics festival={current} setMsg={setMsg} />}
           {tab === 'festival' && (
             <FestivalTab

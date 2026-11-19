@@ -19,13 +19,17 @@ end function
 
 sub fetchFeed()
   festivals = httpGetJson("festivals?status=eq.published&order=sort_order.asc,name.asc&select=*")
-  if festivals = invalid then
+  ' An error from the server comes back as an object, not a list, so check the type before using it.
+  if type(festivals) <> "roArray" then
     m.top.error = "Could not load festivals"
     return
   end if
-  films = httpGetJson("films?status=eq.published&order=created_at.desc&select=*")
+  ' Films come from the public view, which hides the video link of ticketed films (they do not play on Roku).
+  ' Until the paid-access SQL has been run the view does not exist, so fall back to the table.
+  films = httpGetJson("films_public?order=created_at.desc&select=*")
+  if type(films) <> "roArray" then films = httpGetJson("films?status=eq.published&order=created_at.desc&select=*")
+  if type(films) <> "roArray" then films = []
   feeds = httpGetJson("live_feeds?select=*")
-  if films = invalid then films = []
-  if feeds = invalid then feeds = []
+  if type(feeds) <> "roArray" then feeds = []
   m.top.result = { festivals: festivals, films: films, feeds: feeds }
 end sub

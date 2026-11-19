@@ -75,7 +75,7 @@ sub onFeedResult()
     row.title = fest.name
     count = 0
     for each film in data.films
-      if film.festival_id = fest.id then
+      if film.festival_id = fest.id and film.access <> "ticketed" then
         item = row.CreateChild("ContentNode")
         item.title = film.title
         item.addFields({ festivalId: film.festival_id, filmId: film.id })

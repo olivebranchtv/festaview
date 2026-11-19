@@ -53,21 +53,67 @@ DEMO.festivals[0].auto_channel = true
 DEMO.festivals[0].channel_order = 'listed'
 DEMO.festivals[1].auto_channel = true
 DEMO.festivals[1].channel_order = 'shuffle'
+// One ticketed demo film (video link withheld, like the real public view) plus a pass and a ticket to sell.
+const paperMoon = DEMO.films.find((m) => m.id === 'm6')
+paperMoon.access = 'ticketed'
+paperMoon.video_url = null
+DEMO.festivals[2].payments_enabled = true
+DEMO.festivals[2].description = 'Big stories in small runtimes. Free shorts all week, with ticketed premieres.'
+DEMO.products = [
+  { id: 'p1', festival_id: 'f3', film_id: null, name: 'Festival Pass', description: 'Every ticketed screening', price_cents: 2500, currency: 'usd' },
+  { id: 'p2', festival_id: 'f3', film_id: 'm6', name: 'Paper Moon ticket', description: 'Single screening', price_cents: 500, currency: 'usd' },
+]
 
 // Flat queries merged in JS (PostgREST FK joins are unreliable on this stack).
 export async function loadData() {
   if (!supabase) return DEMO
-  const [f, m, l, s, v, sc] = await Promise.all([
+  // Films come from the public view, which hides the video link of ticketed films. Until the paid-access SQL has been
+  // run the view does not exist, so fall back to the table.
+  const filmsQuery = async () => {
+    const v = await supabase.from('films_public').select('*').order('created_at', { ascending: false })
+    if (!v.error) return v
+    return supabase.from('films').select('*').eq('status', 'published').order('created_at', { ascending: false })
+  }
+  const [f, m, l, s, v, sc, pr] = await Promise.all([
     supabase.from('festivals').select('*').eq('status', 'published').order('sort_order').order('name'),
-    supabase.from('films').select('*').eq('status', 'published').order('created_at', { ascending: false }),
+    filmsQuery(),
     supabase.from('live_feeds').select('*'),
     supabase.from('schedule_items').select('*').gte('ends_at', new Date().toISOString()).order('starts_at').limit(200),
     // Venues and screenings are optional: if their tables are missing, the site still loads.
     supabase.from('venues').select('*'),
     supabase.from('screenings').select('*').gte('ends_at', new Date().toISOString()).order('starts_at').limit(300),
+    supabase.from('products').select('*').eq('active', true).order('price_cents'),
   ])
   if (f.error) throw f.error
-  return { demo: false, festivals: f.data || [], films: m.data || [], feeds: l.data || [], schedule: s.data || [], venues: v.data || [], screenings: sc.data || [] }
+  return { demo: false, festivals: f.data || [], films: m.data || [], feeds: l.data || [], schedule: s.data || [], venues: v.data || [], screenings: sc.data || [], products: pr.data || [] }
+}
+
+// ---- paid access ----
+// Asks the database for a film's video link. Free films always return it; ticketed films need a valid access code.
+export async function unlockStream(filmId, code) {
+  if (!supabase) return code && code.trim().toUpperCase() === 'DEMO-PASS' ? DEMO_TRAILER : null
+  const r = await supabase.rpc('unlock_stream', { p_film: filmId, p_code: code || '' })
+  return r.error ? null : r.data || null
+}
+export const storedCode = (festivalId) => { try { return localStorage.getItem('fv_code_' + festivalId) || '' } catch { return '' } }
+export const storeCode = (festivalId, code) => { try { localStorage.setItem('fv_code_' + festivalId, code) } catch { /* ignore */ } }
+
+// Starts a card payment. The server function builds the checkout from the product's price in the database.
+export async function startCheckout(productId) {
+  try {
+    const res = await fetch('/.netlify/functions/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId }) })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok || !j.url) return { ok: false, message: j.error || 'Payments are not available right now.' }
+    return { ok: true, url: j.url }
+  } catch { return { ok: false, message: 'Payments are not available right now.' } }
+}
+
+// After paying, the buyer's access code is created by the payment webhook; this fetches it.
+export async function claimAccess(sessionId) {
+  try {
+    const res = await fetch('/.netlify/functions/claim?session_id=' + encodeURIComponent(sessionId))
+    return await res.json()
+  } catch { return { status: 'error' } }
 }
 
 // ---- anonymous visitor actions ----

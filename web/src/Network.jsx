@@ -177,6 +177,24 @@ function Analytics({ data, days, setDays, assume, setAssume }) {
   )
 }
 
+// Owner-only: turns card payments on for a festival and sets Festaview's fee on paid sales.
+function PaymentsControl({ f, reload, note }) {
+  const [on, setOn] = useState(!!f.payments_enabled)
+  const [fee, setFee] = useState(String(f.ticket_fee_pct ?? 0))
+  const save = async () => {
+    const pct = parseFloat(fee)
+    if (!(pct >= 0 && pct <= 100)) { note('Fee must be between 0 and 100.', true); return }
+    try { await api.setFestivalPayments(f.id, on, pct); note('Payments saved for ' + f.name + '.'); reload() } catch (x) { note(x.message, true) }
+  }
+  return (
+    <span className="paymini">
+      <label><input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} /> Payments</label>
+      <input value={fee} onChange={(e) => setFee(e.target.value)} inputMode="decimal" aria-label="Fee percent" />%
+      <button type="button" className="btn ghost small" onClick={save}>Save</button>
+    </span>
+  )
+}
+
 function Manage({ data, reload, note }) {
   const [name, setName] = useState('')
   const [assign, setAssign] = useState({ email: '', festival: '' })
@@ -199,6 +217,7 @@ function Manage({ data, reload, note }) {
             <li key={f.id}>
               <div><strong>{f.name}</strong><small>/{f.slug} | {data.admins.filter((a) => a.festival_id === f.id).length} admin(s)</small></div>
               <span className={'pill ' + f.status}>{f.status}</span>
+              <PaymentsControl f={f} reload={reload} note={note} />
               {f.status !== 'published' && <button className="btn ghost" onClick={() => publish(f, 'published')}>Publish</button>}
               {f.status === 'published' && <button className="btn ghost" onClick={() => publish(f, 'draft')}>Unpublish</button>}
               <a className="btn ghost" href={'#/festival/' + f.slug}>View</a>
