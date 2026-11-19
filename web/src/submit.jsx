@@ -84,7 +84,6 @@ export function SubmitIndexPage() {
   useSeo({ title: 'Submit Your Film to Festivals', description: 'Create one Festaview account, find film festivals that are accepting submissions, enter your short or feature, and pay the entry fee by card.' })
   const [board, setBoard] = useState(null)
   const [err, setErr] = useState('')
-  useEffect(() => { if (session) listMyFilms().then(setFilms).catch(() => {}) }, [session])
   useEffect(() => { loadSubmissionBoard().then(setBoard).catch(() => setErr('Could not load festivals right now. Please refresh in a moment.')) }, [])
   return (
     <section className="block">
@@ -255,6 +254,7 @@ export function FestivalSubmitPage({ slug }) {
   const [err, setErr] = useState('')
   const [made, setMade] = useState(null)
   const [films, setFilms] = useState([])
+  useEffect(() => { if (session) listMyFilms().then(setFilms).catch(() => {}) }, [session])
   useEffect(() => { loadSubmissionBoard().then(setBoard).catch(() => setBoard({ failed: true, entries: [], festivals: [], categories: [], tiers: [] })) }, [])
   const entry = board && board.entries.find((x) => x.festival.slug === slug)
   const fest = entry ? entry.festival : board && board.festivals.find((x) => x.slug === slug)

@@ -273,6 +273,10 @@ function Inquiries({ note }) {
 
 // Network owner console: Festaview-wide analytics, festival management, inquiries.
 // Owner controls for the virtual theater: booking rules, screens and approvals.
+function Field({ label, hint, children }) {
+  return <label className="field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label>
+}
+
 function CinemaOwner({ data, note }) {
   const [d, setD] = useState(null)
   const [settings, setSettings] = useState(null)
