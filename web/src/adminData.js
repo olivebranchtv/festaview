@@ -634,10 +634,24 @@ export const cinemaAdDaily = (ad, from, to) => adRpc('cinema_ad_daily', { p_ad: 
 // festival
 export async function listTrailers(fid) {
   if (isDemo) return []
-  const r = await supabase.from('cinema_ads').select('*').eq('festival_id', fid).eq('kind', 'trailer').order('created_at', { ascending: false })
+  const r = await supabase.from('cinema_ads').select('*').eq('festival_id', fid).in('kind', ['trailer', 'sponsor']).order('created_at', { ascending: false })
   if (r.error) throw r.error
   return r.data || []
 }
-export const saveTrailer = (fid, t) => adRpc('save_cinema_trailer', { p_festival: fid, p_id: t.id || null, p_title: t.title, p_url: t.video_url, p_dur: t.duration_sec, p_click: t.click_url || null, p_active: t.active !== false })
+export const saveTrailer = (fid, t) => adRpc('save_cinema_spot', { p_festival: fid, p_id: t.id || null, p_kind: t.kind || 'trailer', p_sponsor: t.sponsor_name || null, p_title: t.title, p_url: t.video_url, p_dur: t.duration_sec, p_click: t.click_url || null, p_active: t.active !== false })
 export const setShowingTrailers = (showingId, ids) => adRpc('set_showing_trailers', { p_showing: showingId, p_ids: ids })
 export const festivalAdReport = (fid, from, to) => adRpc('cinema_festival_ad_report', { p_festival: fid, p_from: from, p_to: to })
+
+// Edits a showing the festival booked (time, screen, seats and price lock once the doors open).
+export async function updateShowing(id, a) {
+  if (isDemo) {
+    const s = load(); s.showings = (s.showings || []).map((x) => (x.id === id ? { ...x, title: a.title, starts_at: a.starts_at, lobby_minutes: a.lobby, qa_minutes: a.qa, seats: a.seats } : x)); persist(s)
+    return { status: 'scheduled' }
+  }
+  const r = await supabase.rpc('update_showing', {
+    p_id: id, p_title: a.title, p_description: a.description || null, p_poster: a.poster_url || null, p_rating: a.rating || null, p_starts_at: a.starts_at,
+    p_lobby: a.lobby, p_qa: a.qa, p_seats: a.seats, p_price_cents: a.price_cents || 0, p_preroll: a.preroll_url || null, p_sponsor: a.sponsor_name || null, p_screen: a.screen_id,
+  })
+  if (r.error) throw r.error
+  return r.data
+}

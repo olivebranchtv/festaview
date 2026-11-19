@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import * as api from './adminData.js'
 import SubmissionsTab from './SubmissionsTab.jsx'
 import Preshow from './Preshow.jsx'
+import ShowingEdit from './ShowingEdit.jsx'
 
 const toLocal = (iso) => (iso ? new Date(iso).toISOString().slice(0, 16) : '')
 const fromLocal = (v) => (v ? new Date(v).toISOString() : '')
@@ -1198,6 +1199,7 @@ function CinemaTab({ festival, setMsg }) {
   const [taken, setTaken] = useState({})
   const [f, setF] = useState(EMPTY_SHOWING)
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -1335,15 +1337,19 @@ function CinemaTab({ festival, setMsg }) {
           {showings.map((s) => {
             const sc = screens.find((x) => x.id === s.screen_id)
             return (
-              <li key={s.id}>
+              <Fragment key={s.id}>
+              <li>
                 <div>
                   <strong>{s.title}</strong>
                   <small>{sc ? sc.name : 'Screen'} | {local(s.starts_at)} | {s.runtime_min} min | {(taken[s.id] || 0)}{s.seats ? ' of ' + s.seats : ''} seats taken | {s.price_cents > 0 ? '$' + (s.price_cents / 100).toFixed(2) + ' ticket' : 'Free'}</small>
                 </div>
                 <span className={'pill ' + (s.status === 'scheduled' ? 'published' : s.status === 'pending' ? 'draft' : 'draft')}>{s.status === 'pending' ? 'awaiting approval' : s.status}</span>
                 {s.status === 'scheduled' && <a className="btn ghost" href={'/cinema/' + s.id}>View</a>}
+                {s.status !== 'cancelled' && <button type="button" className="btn ghost" onClick={() => setEditing(editing === s.id ? null : s.id)}>{editing === s.id ? 'Close' : 'Edit'}</button>}
                 {s.status !== 'cancelled' && <button type="button" className="btn ghost danger" onClick={() => cancel(s)}>Cancel</button>}
               </li>
+              {editing === s.id && <li><ShowingEdit showing={s} screens={screens} festival={festival} taken={taken[s.id]} setMsg={setMsg} onDone={() => { setEditing(null); refresh() }} /></li>}
+              </Fragment>
             )
           })}
         </ul>
