@@ -215,14 +215,17 @@ function FilmModal({ film, festival, onClose, startMode, products }) {
   )
 }
 
-function Header({ go }) {
+function Header({ go, data }) {
+  // Only offer a menu link when its section exists on the page (those sections hide themselves when empty).
+  const hasGuide = !!data && buildChannels(data).length > 0
+  const hasVirtual = !!data && (data.events || []).some((e) => !eventState(e).ended)
   return (
     <header className="top">
       <a href="#/" className="brand"><span className="mark" aria-hidden="true" />FESTAVIEW</a>
       <nav className="nav">
         <button onClick={() => go('festivals')}>Festivals</button>
-        <button onClick={() => go('guide')}>TV guide</button>
-        <button onClick={() => go('virtual')}>Virtual</button>
+        {hasGuide && <button onClick={() => go('guide')}>TV guide</button>}
+        {hasVirtual && <button onClick={() => go('virtual')}>Virtual</button>}
         <button onClick={() => go('live')}>Live</button>
         <button onClick={() => go('devices')}>Watch</button>
         <button onClick={() => go('for-festivals')}>For festivals</button>
@@ -917,7 +920,7 @@ export default function App() {
 
   return (
     <div className="app">
-      {!isTheater && <Header go={go} />}
+      {!isTheater && <Header go={go} data={data} />}
       <main>
         <Suspense fallback={<p className="note pad">Loading...</p>}>
           {isAdmin && <div className="wrap-admin"><Admin /></div>}
