@@ -1189,7 +1189,7 @@ const EMPTY_SHOWING = {
   rating: '', screen_id: '', starts_at: '', lobby: '10', qa: '0', seats: '', price: '',
 }
 
-// Book a showing in the Festaview virtual theater: pick a title, a screen and a start time.
+// Book a showing at Festaview Cinemas: pick a title, a screen and a start time.
 function CinemaTab({ festival, setMsg }) {
   const [screens, setScreens] = useState([])
   const [films, setFilms] = useState([])
@@ -1258,7 +1258,7 @@ function CinemaTab({ festival, setMsg }) {
   return (
     <div>
       <div className="panel">
-        <h2>Book a showing in the virtual theater</h2>
+        <h2>Book a showing at Festaview Cinemas</h2>
         <p className="note">Pick a title, a screen and a start time. Everyone watches together, and viewers who arrive late join at the live point. Times you enter are in your own time zone{tz ? ' (' + tz + ')' : ''}. Viewers see their own. Your festival must be published, and showings may wait for Festaview's approval before they appear.</p>
         <form onSubmit={submit}>
           <div className="two">
@@ -1416,7 +1416,7 @@ export default function Admin() {
           )}
           {current.status === 'draft' && <GettingStarted festival={current} goTab={setTab} />}
           <nav className="tabs">
-            {[['films', 'Films'], ['submissions', 'Submissions'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['cinema', 'Virtual theater'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
+            {[['films', 'Films'], ['submissions', 'Submissions'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['cinema', 'Festaview Cinemas'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
               <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsgState(null) }}>{label}</button>
             ))}
           </nav>

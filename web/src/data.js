@@ -285,7 +285,7 @@ const T0 = Date.now()
 const mk = (id, screen, fest, kind, title, filmIds, startOffsetSec, lobby, runtimeMin, extra = {}) => ({
   id, screen_id: 'sc' + screen, screen_number: screen, screen_name: 'Screen ' + screen,
   festival_id: fest.id, festival_slug: fest.slug, festival_name: fest.name,
-  kind, title, description: extra.description || 'A showing in the Festaview virtual theater.', poster_url: extra.poster_url || null, rating: extra.rating || null,
+  kind, title, description: extra.description || 'A showing at Festaview Cinemas.', poster_url: extra.poster_url || null, rating: extra.rating || null,
   film_ids: filmIds, live_stream_url: kind === 'live' ? DEMO_TRAILER : null, preroll_url: extra.preroll_url || null, sponsor_name: extra.sponsor_name || null,
   starts_at: new Date(T0 + startOffsetSec * 1000).toISOString(), lobby_minutes: lobby, runtime_min: runtimeMin, qa_minutes: extra.qa || 0,
   ends_at: new Date(T0 + (startOffsetSec + (runtimeMin + (extra.qa || 0)) * 60) * 1000).toISOString(),

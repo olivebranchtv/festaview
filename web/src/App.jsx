@@ -22,7 +22,7 @@ const VirtualRoom = lazy(() => import('./VirtualRoom.jsx'))
 function Header({ path }) {
   const [open, setOpen] = useState(false)
   useEffect(() => { setOpen(false) }, [path])
-  const links = [['/festivals', 'Festivals'], ['/films', 'Films'], ['/cinema', 'Virtual theater'], ['/virtual', 'Virtual cinema'], ['/tv-guide', 'TV guide'], ['/live', 'Live'], ['/watch', 'Watch'], ['/submit', 'Submit your film'], ['/for-festivals', 'For festivals']]
+  const links = [['/festivals', 'Festivals'], ['/films', 'Films'], ['/cinema', 'Festaview Cinemas'], ['/virtual', 'Virtual cinema'], ['/tv-guide', 'TV guide'], ['/live', 'Live'], ['/watch', 'Watch'], ['/submit', 'Submit your film'], ['/for-festivals', 'For festivals']]
   return (
     <header className="top">
       <a href="/" className="brand"><span className="mark" aria-hidden="true" />FESTAVIEW</a>

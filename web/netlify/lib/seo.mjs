@@ -190,12 +190,12 @@ export function pageSeo(pathname, data, origin) {
       return seo
     }
     case 'cinema': {
-      seo.title = 'Virtual Theater: Now Showing and Showtimes'
-      seo.description = 'The Festaview virtual theater. See what is playing on every screen and the showtimes, then watch together with everyone, from anywhere.'
-      const items = [['/', 'Home'], [null, 'Virtual theater']]
+      seo.title = 'Festaview Cinemas: Now Showing and Showtimes'
+      seo.description = 'Festaview Cinemas, the virtual theater. See what is playing on every screen and the showtimes, then watch together with everyone, from anywhere.'
+      const items = [['/', 'Home'], [null, 'Festaview Cinemas']]
       const shows = (data.cinema || []).slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
-      seo.jsonld.push(breadcrumbLd(items), { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Virtual theater', url: seo.canonical, mainEntity: { '@type': 'ItemList', itemListElement: shows.slice(0, 50).map((s, i) => ({ '@type': 'ListItem', position: i + 1, url: abs(cinemaPath(s)), name: s.title })) } })
-      seo.body = shell(crumbs(items) + '<h1>Virtual theater</h1><p>Scheduled showings on numbered screens. Everyone watches together, and you can join late. Times appear in your own time zone.</p>' +
+      seo.jsonld.push(breadcrumbLd(items), { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Festaview Cinemas', url: seo.canonical, mainEntity: { '@type': 'ItemList', itemListElement: shows.slice(0, 50).map((s, i) => ({ '@type': 'ListItem', position: i + 1, url: abs(cinemaPath(s)), name: s.title })) } })
+      seo.body = shell(crumbs(items) + '<h1>Festaview Cinemas</h1><p>Scheduled showings on numbered screens. Everyone watches together, and you can join late. Times appear in your own time zone.</p>' +
         (shows.length ? '<h2>Now showing and coming up</h2>' + list(shows.map((s) => link(cinemaPath(s), s.title) + ' - ' + esc(s.screen_name) + ' - ' + esc(new Date(s.starts_at).toISOString()) + (s.festival_name ? ' - ' + esc(s.festival_name) : ''))) : '<p>No showings are scheduled right now. Check back soon.</p>'))
       return seo
     }
@@ -203,10 +203,10 @@ export function pageSeo(pathname, data, origin) {
       const s = (data.cinema || []).find((x) => x.id === route.id)
       if (!s) return data.ok ? notFound(seo) : seo
       seo.canonical = abs(cinemaPath(s))
-      seo.title = s.title + ': Virtual Theater Showing'
-      seo.description = clip((s.description || 'Watch ' + s.title + ' in the Festaview virtual theater.') + ' ' + s.screen_name + (s.festival_name ? ', presented by ' + s.festival_name : '') + '.', 158)
+      seo.title = s.title + ': Showing at Festaview Cinemas'
+      seo.description = clip((s.description || 'Watch ' + s.title + ' at Festaview Cinemas.') + ' ' + s.screen_name + (s.festival_name ? ', presented by ' + s.festival_name : '') + '.', 158)
       seo.image = s.poster_url || DEFAULT_IMAGE
-      const items = [['/', 'Home'], ['/cinema', 'Virtual theater'], [null, s.title]]
+      const items = [['/', 'Home'], ['/cinema', 'Festaview Cinemas'], [null, s.title]]
       const ld = {
         '@context': 'https://schema.org', '@type': 'ScreeningEvent', name: s.title, description: clip(s.description || s.title, 500), url: seo.canonical, image: s.poster_url || undefined,
         startDate: new Date(s.starts_at).toISOString(), endDate: new Date(s.ends_at).toISOString(),

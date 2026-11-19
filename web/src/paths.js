@@ -24,7 +24,7 @@ export const STATIC_PAGES = [
   ['/', 'Home'],
   ['/festivals', 'Film festivals'],
   ['/films', 'Films'],
-  ['/cinema', 'Virtual theater'],
+  ['/cinema', 'Festaview Cinemas'],
   ['/virtual', 'Virtual cinema'],
   ['/submit', 'Submit your film'],
   ['/tv-guide', 'TV guide'],

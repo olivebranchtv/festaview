@@ -72,7 +72,7 @@ export function NowShowingStrip() {
   if (!items.length) return null
   return (
     <section className="block">
-      <div className="sec-head"><h2>Virtual theater: now showing</h2><a className="more" href="/cinema">Full showtimes</a></div>
+      <div className="sec-head"><h2>Now showing at Festaview Cinemas</h2><a className="more" href="/cinema">Full showtimes</a></div>
       <div className="show-grid">{items.map((s) => <ShowingCard key={s.id} s={s} />)}</div>
     </section>
   )
@@ -80,11 +80,11 @@ export function NowShowingStrip() {
 
 // ---------------------------------------------------------------- the marquee
 export function CinemaPage() {
-  useSeo({ title: 'Virtual Theater: Now Showing and Showtimes', description: 'The Festaview virtual theater. See what is playing on every screen and the showtimes, then watch together with everyone, from anywhere.' })
+  useSeo({ title: 'Festaview Cinemas: Now Showing and Showtimes', description: 'Festaview Cinemas, the virtual theater. See what is playing on every screen and the showtimes, then watch together with everyone, from anywhere.' })
   const c = useCinema()
   const today = dayKey(new Date().toISOString())
   const [day, setDay] = useState(today)
-  if (!c) return <section className="block"><h1>Virtual theater</h1><p className="note">Loading showtimes...</p></section>
+  if (!c) return <section className="block"><h1>Festaview Cinemas</h1><p className="note">Loading showtimes...</p></section>
 
   const live = c.showings.filter((s) => { const k = showState(s).key; return k === 'playing' || k === 'lobby' || k === 'qa' })
   const days = [...new Set([today, ...c.showings.map((s) => dayKey(s.starts_at))])].sort().slice(0, 8)
@@ -93,8 +93,8 @@ export function CinemaPage() {
 
   return (
     <section className="block marquee">
-      <nav className="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span>Virtual theater</span></nav>
-      <h1>Virtual theater</h1>
+      <nav className="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span>Festaview Cinemas</span></nav>
+      <h1>Festaview Cinemas</h1>
       <p className="lede">Scheduled showings on numbered screens. Everyone watches together, and you can join late. All times are in your own time zone{zoneName() ? ' (' + zoneName() + ')' : ''}.</p>
 
       {live.length > 0 && (
@@ -130,7 +130,7 @@ export function CinemaPage() {
 const icsStamp = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
 function downloadIcs(s) {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Festaview//Theater//EN', 'BEGIN:VEVENT', 'UID:' + s.id + '@festaview', 'DTSTAMP:' + icsStamp(new Date().toISOString()),
-    'DTSTART:' + icsStamp(s.starts_at), 'DTEND:' + icsStamp(s.ends_at), 'SUMMARY:' + s.title.replace(/[,;]/g, ' ') + ' - Festaview virtual theater', 'URL:' + window.location.origin + cinemaPath(s), 'END:VEVENT', 'END:VCALENDAR']
+    'DTSTART:' + icsStamp(s.starts_at), 'DTEND:' + icsStamp(s.ends_at), 'SUMMARY:' + s.title.replace(/[,;]/g, ' ') + ' - Festaview Cinemas', 'URL:' + window.location.origin + cinemaPath(s), 'END:VEVENT', 'END:VCALENDAR']
   const a = document.createElement('a')
   a.href = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/calendar' }))
   a.download = 'festaview-showing.ics'
@@ -163,7 +163,7 @@ export function ShowingPage({ id }) {
     poll()
     return () => { stop = true }
   }, [id, code])
-  useSeo(s ? { title: s.title + ': Virtual Theater Showing', description: (s.description || 'Watch ' + s.title + ' in the Festaview virtual theater.') + ' ' + s.screen_name + '.', canonicalPath: cinemaPath(s), image: s.poster_url || undefined } : { title: c ? 'Showing not found' : 'Virtual theater', robots: c ? 'noindex' : 'index,follow' })
+  useSeo(s ? { title: s.title + ': Showing at Festaview Cinemas', description: (s.description || 'Watch ' + s.title + ' at Festaview Cinemas.') + ' ' + s.screen_name + '.', canonicalPath: cinemaPath(s), image: s.poster_url || undefined } : { title: c ? 'Showing not found' : 'Festaview Cinemas', robots: c ? 'noindex' : 'index,follow' })
   if (!c) return <section className="block"><p className="note">Loading...</p></section>
   if (!s) return <NotFoundPage />
 
@@ -193,7 +193,7 @@ export function ShowingPage({ id }) {
   if (inRoom) {
     return (
       <section className="block room">
-        <nav className="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/cinema">Virtual theater</a> / <span>{s.title}</span></nav>
+        <nav className="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/cinema">Festaview Cinemas</a> / <span>{s.title}</span></nav>
         <Suspense fallback={<p className="note">Opening the theater...</p>}><CinemaRoom showing={s} onLeave={() => setInRoom(false)} /></Suspense>
       </section>
     )
@@ -201,7 +201,7 @@ export function ShowingPage({ id }) {
 
   return (
     <article className="block film-page">
-      <nav className="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/cinema">Virtual theater</a> / <span>{s.title}</span></nav>
+      <nav className="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/cinema">Festaview Cinemas</a> / <span>{s.title}</span></nav>
       <div className="film-grid">
         <div className="film-media">
           <div className="modal-art" style={s.poster_url ? undefined : bg()}>{s.poster_url ? <img src={s.poster_url} alt={'Poster for ' + s.title} /> : <div className="spot-fallback">{s.title}</div>}</div>

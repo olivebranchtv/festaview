@@ -447,7 +447,7 @@ export default function Network() {
         {api.isDemo && <span className="pill draft">Demo data</span>}
       </div>
       <nav className="tabs">
-        {[['analytics', 'Analytics'], ['festivals', 'Festivals'], ['cinema', 'Virtual theater'], ['rates', 'Box office cut'], ['inquiries', 'Inquiries']].map(([k, label]) => (
+        {[['analytics', 'Analytics'], ['festivals', 'Festivals'], ['cinema', 'Festaview Cinemas'], ['rates', 'Box office cut'], ['inquiries', 'Inquiries']].map(([k, label]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsg(null) }}>{label}</button>
         ))}
       </nav>
