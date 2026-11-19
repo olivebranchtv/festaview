@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as api from './adminData.js'
 import { durationOf } from './channels.js'
+import CinemaAds from './CinemaAds.jsx'
 
 const slugify = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 const num = (n) => Number(n || 0).toLocaleString()
@@ -447,7 +448,7 @@ export default function Network() {
         {api.isDemo && <span className="pill draft">Demo data</span>}
       </div>
       <nav className="tabs">
-        {[['analytics', 'Analytics'], ['festivals', 'Festivals'], ['cinema', 'Festaview Cinemas'], ['rates', 'Box office cut'], ['inquiries', 'Inquiries']].map(([k, label]) => (
+        {[['analytics', 'Analytics'], ['festivals', 'Festivals'], ['cinema', 'Festaview Cinemas'], ['ads', 'Cinema ads'], ['rates', 'Box office cut'], ['inquiries', 'Inquiries']].map(([k, label]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsg(null) }}>{label}</button>
         ))}
       </nav>
@@ -462,6 +463,7 @@ export default function Network() {
       {data && tab === 'festivals' && <Manage data={data} reload={reload} note={note} />}
       {data && tab === 'rates' && <TicketRates data={data} note={note} />}
       {data && tab === 'cinema' && <CinemaOwner data={data} note={note} />}
+      {tab === 'ads' && <CinemaAds note={note} />}
       {tab === 'inquiries' && <Inquiries note={note} />}
     </div>
   )

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from './adminData.js'
 import SubmissionsTab from './SubmissionsTab.jsx'
+import Preshow from './Preshow.jsx'
 
 const toLocal = (iso) => (iso ? new Date(iso).toISOString().slice(0, 16) : '')
 const fromLocal = (v) => (v ? new Date(v).toISOString() : '')
@@ -1324,6 +1325,8 @@ function CinemaTab({ festival, setMsg }) {
           <button className="btn" type="submit" disabled={busy}>{busy ? 'Booking...' : 'Book this showing'}</button>
         </form>
       </div>
+
+      <Preshow festival={festival} setMsg={setMsg} />
 
       <div className="panel">
         <h2>Your showings</h2>

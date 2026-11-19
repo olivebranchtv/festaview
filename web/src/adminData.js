@@ -604,3 +604,40 @@ export async function setTicketRate(kind, id, pct) {
   const r = await supabase.rpc('set_ticket_rate', { p_kind: kind, p_id: id, p_pct: pct })
   if (r.error) throw r.error
 }
+
+// ---- Festaview Cinemas pre-show: our own ad server and trailers ----
+const needAdsDb = () => { if (isDemo) throw new Error('The ad server needs a connected database.') }
+const adRpc = async (name, args) => { needAdsDb(); const r = await supabase.rpc(name, args); if (r.error) throw r.error; return r.data }
+
+// network owner
+export async function cinemaAdsData() {
+  if (isDemo) return { advertisers: [], ads: [], enabled: true }
+  const [v, a, st] = await Promise.all([
+    supabase.from('cinema_advertisers').select('*').order('name'),
+    supabase.from('cinema_ads').select('*').eq('kind', 'ad').order('created_at', { ascending: false }),
+    supabase.from('cinema_settings').select('ads_enabled').eq('id', 1),
+  ])
+  const err = v.error || a.error
+  if (err) throw err
+  return { advertisers: v.data || [], ads: a.data || [], enabled: !(st.data && st.data[0] && st.data[0].ads_enabled === false) }
+}
+export const saveAdvertiser = (a) => adRpc('save_cinema_advertiser', { p_id: a.id || null, p_name: a.name, p_contact_name: a.contact_name || null, p_contact_email: a.contact_email || null, p_notes: a.notes || null, p_active: a.active !== false })
+export const saveCinemaAd = (a) => adRpc('save_cinema_ad', {
+  p_id: a.id || null, p_advertiser: a.advertiser_id, p_title: a.title, p_url: a.video_url, p_dur: a.duration_sec, p_click: a.click_url || null, p_cpm_cents: a.cpm_cents || 0,
+  p_starts_on: a.starts_on || null, p_ends_on: a.ends_on || null, p_max_impressions: a.max_impressions || null, p_priority: a.priority || 0, p_active: a.active !== false,
+})
+export const deleteCinemaAd = (id) => adRpc('delete_cinema_ad', { p_id: id })
+export const setCinemaAdsEnabled = (on) => adRpc('set_cinema_ads_enabled', { p_on: on })
+export const cinemaAdReport = (from, to) => adRpc('cinema_ad_report', { p_from: from, p_to: to })
+export const cinemaAdDaily = (ad, from, to) => adRpc('cinema_ad_daily', { p_ad: ad, p_from: from, p_to: to })
+
+// festival
+export async function listTrailers(fid) {
+  if (isDemo) return []
+  const r = await supabase.from('cinema_ads').select('*').eq('festival_id', fid).eq('kind', 'trailer').order('created_at', { ascending: false })
+  if (r.error) throw r.error
+  return r.data || []
+}
+export const saveTrailer = (fid, t) => adRpc('save_cinema_trailer', { p_festival: fid, p_id: t.id || null, p_title: t.title, p_url: t.video_url, p_dur: t.duration_sec, p_click: t.click_url || null, p_active: t.active !== false })
+export const setShowingTrailers = (showingId, ids) => adRpc('set_showing_trailers', { p_showing: showingId, p_ids: ids })
+export const festivalAdReport = (fid, from, to) => adRpc('cinema_festival_ad_report', { p_festival: fid, p_from: from, p_to: to })

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { preshowWhere, reelSeconds, adLabel, PHONE_SEC } from '../src/preshow.js'
 import { currentTier, submissionState, csvText, money as feeMoney } from '../src/submissionRules.js'
 import { verifyStripeSignature, makeCode, feeCents, checkoutParams, ticketCheckoutParams, submissionCheckoutParams } from './lib/pay.mjs'
 import checkout from './functions/checkout.mjs'
@@ -289,6 +290,20 @@ ok('a step without a deadline is the last step', currentTier([{ id: 'open', dead
 ok('submissions follow the festival switch and dates', submissionState({ submissions_open: true }, nowMs) === 'open' && submissionState({ submissions_open: false }, nowMs) === 'closed' && submissionState({ submissions_open: true, submissions_opens_at: new Date(nowMs + dayMs).toISOString() }, nowMs) === 'not_open' && submissionState({ submissions_open: true, submissions_closes_at: new Date(nowMs - dayMs).toISOString() }, nowMs) === 'closed')
 ok('money text', feeMoney(0) === 'Free' && feeMoney(3500) === '$35' && feeMoney(2550) === '$25.50')
 ok('csv quotes values and defuses spreadsheet formulas', csvText([['a"b', '=HYPERLINK("x")', '+1', 'ok']]) === '"a""b","\'=HYPERLINK(""x"")","\'+1","ok"')
+
+// --- theater pre-show: ads, trailers, phone reminder, feature
+const plan = [{ id: 'a1', kind: 'ad', dur: 120 }, { id: 'a2', kind: 'ad', dur: 60 }, { id: 't1', kind: 'trailer', dur: 150 }]
+const lobbyAt = 1000000, showAt = lobbyAt + 600000
+ok('reel length adds up', reelSeconds(plan) === 330 && reelSeconds(null) === 0)
+ok('right after the doors open the first ad plays from its start', (() => { const w = preshowWhere(plan, lobbyAt, showAt, lobbyAt + 1000); return w.phase === 'ad' && w.idx === 0 && Math.round(w.offset) === 1 })())
+ok('a late arrival joins the reel in step with the room', (() => { const w = preshowWhere(plan, lobbyAt, showAt, lobbyAt + 130000); return w.phase === 'ad' && w.idx === 1 && Math.round(w.offset) === 10 })())
+ok('trailers play after the ads', preshowWhere(plan, lobbyAt, showAt, lobbyAt + 200000).item.kind === 'trailer')
+ok('after the reel there is an intermission until the phone reminder', (() => { const w = preshowWhere(plan, lobbyAt, showAt, lobbyAt + 400000); return w.phase === 'gap' && w.left === 200 })())
+ok('the last 30 seconds before the film ask everyone to silence their phone', preshowWhere(plan, lobbyAt, showAt, showAt - 20000).phase === 'phone' && preshowWhere(plan, lobbyAt, showAt, showAt - PHONE_SEC * 1000).phase === 'phone')
+ok('the last 5 seconds announce the feature', preshowWhere(plan, lobbyAt, showAt, showAt - 3000).phase === 'feature')
+ok('at showtime the pre-show is over', preshowWhere(plan, lobbyAt, showAt, showAt) === null)
+ok('with no reel the doors-open card shows, then the reminder', preshowWhere([], lobbyAt, showAt, lobbyAt + 5000).phase === 'gap' && preshowWhere(null, lobbyAt, showAt, showAt - 10000).phase === 'phone')
+ok('ads and trailers are labelled differently', adLabel({ kind: 'ad' }) === 'Advertisement' && adLabel({ kind: 'trailer' }) === 'Coming attractions')
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed')
 process.exit(fail ? 1 : 0)

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Hls from 'hls.js'
-import { cinemaJoin, cinemaListChat, cinemaPostChat, logView } from './data.js'
+import { cinemaJoin, cinemaListChat, cinemaPostChat, cinemaAdEvent, logView } from './data.js'
+import { preshowWhere, adLabel } from './preshow.js'
 import { ChatPanel } from './VirtualRoom.jsx'
 import { TvGuide } from './tvHelp.jsx'
 import { loadCast, watchCast, requestCast, endCast, castLoad, castPosition, castSeek } from './cast.js'
@@ -30,6 +31,8 @@ function attach(video, url, hlsRef, start) {
 export default function CinemaRoom({ showing, onLeave }) {
   const [state, setState] = useState({ status: 'joining' })
   const [muted, setMuted] = useState(false)
+  const [blocked, setBlocked] = useState(false)
+  const adSent = useRef(new Set())
   const [, setTick] = useState(0)
   const videoRef = useRef(null)
   const stageRef = useRef(null)
@@ -78,7 +81,7 @@ export default function CinemaRoom({ showing, onLeave }) {
   // Where the clock says the room is right now.
   const where = () => {
     const n = nowMs()
-    if (n < startMs) return { phase: 'lobby', left: Math.ceil((startMs - n) / 1000) }
+    if (n < startMs) return { phase: 'lobby', left: Math.ceil((startMs - n) / 1000), pre: preshowWhere(info.preshow, Date.parse(info.lobby_open), startMs, n) }
     const pos = (n - startMs) / 1000
     if (pos < total) {
       let acc = 0
@@ -96,7 +99,7 @@ export default function CinemaRoom({ showing, onLeave }) {
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 500); return () => clearInterval(t) }, [])
 
   // Start, switch or stop the picture when the room changes phase (lobby, a film, the Q&A).
-  const phaseKey = view ? view.phase + ':' + (view.idx != null ? view.idx : '') : ''
+  const phaseKey = view ? view.phase + ':' + (view.idx != null ? view.idx : '') + (view.pre ? ':' + view.pre.phase + ':' + (view.pre.idx != null ? view.pre.idx : '') : '') : ''
   useEffect(() => {
     if (!ok || !view) return undefined
     const v = videoRef.current
@@ -105,14 +108,27 @@ export default function CinemaRoom({ showing, onLeave }) {
     let watched = { secs: 0, last: 0 }
     let item = null
     let onTime = null
+    let onEnd = null
+    let ad = null
     if (view.phase === 'playing') {
       item = timeline[view.idx]
       attach(v, item.url, hlsRef, item.kind === 'live' ? 0 : Math.max(0, Math.floor(view.offset)))
       v.loop = false
-      v.play().catch(() => {})
+      v.play().then(() => setBlocked(false)).catch(() => setBlocked(true))
       onTime = () => { const d = v.currentTime - watched.last; if (d > 0 && d < 1.5) watched.secs += d; watched.last = v.currentTime }
       v.addEventListener('timeupdate', onTime)
-    } else if (view.phase === 'lobby' && info.preroll_url) {
+    } else if (view.phase === 'lobby' && view.pre && view.pre.phase === 'ad') {
+      // An advertiser spot or a coming-attraction trailer. Counted for the advertiser: a start when it plays, a complete when it reaches its end.
+      ad = view.pre.item
+      attach(v, ad.url, hlsRef, Math.max(0, Math.floor(view.pre.offset)))
+      v.loop = false
+      const once = (ev) => { const k = ad.id + ':' + ev; if (!adSent.current.has(k)) { adSent.current.add(k); cinemaAdEvent(ad.id, showing.id, ev) } }
+      v.play().then(() => { setBlocked(false); once('start') }).catch(() => setBlocked(true))
+      onTime = () => { if (!v.paused && v.currentTime >= Math.min(ad.dur, v.duration || ad.dur) - 0.8) once('complete') }
+      onEnd = () => once('complete')
+      v.addEventListener('timeupdate', onTime)
+      v.addEventListener('ended', onEnd)
+    } else if (view.phase === 'lobby' && info.preroll_url && view.pre && view.pre.phase === 'gap') {
       attach(v, info.preroll_url, hlsRef, 0)
       v.loop = true
       v.play().catch(() => {})
@@ -121,6 +137,7 @@ export default function CinemaRoom({ showing, onLeave }) {
     }
     return () => {
       if (onTime) v.removeEventListener('timeupdate', onTime)
+      if (onEnd) v.removeEventListener('ended', onEnd)
       if (item && watched.secs >= 1) {
         logView({ ...(item.film ? { film_id: item.film.id } : {}), festival_id: info.festival_id, seconds_watched: Math.min(21600, Math.round(watched.secs)), source: 'theater' })
       }
@@ -203,6 +220,7 @@ export default function CinemaRoom({ showing, onLeave }) {
   const current = view.phase === 'playing' ? timeline[view.idx] : null
   const next = view.phase === 'playing' ? timeline[view.idx + 1] : null
   const late = view.phase === 'playing' && view.into > 20
+  const pre = view.phase === 'lobby' ? view.pre : null
 
   return (
     <div className={'room-grid' + (info.chat_enabled ? ' with-chat' : '')}>
@@ -216,7 +234,33 @@ export default function CinemaRoom({ showing, onLeave }) {
               <p className="note">{view.phase === 'lobby' ? 'The film will start on your TV at showtime.' : 'Your TV is playing the room. Chat stays here on this device.'}</p>
             </div>
           )}
-          {view.phase === 'lobby' && !info.preroll_url && !cast.on && (
+          {pre && pre.phase === 'ad' && (
+            <>
+              <div className="lobby-tag">{adLabel(pre.item)}{pre.item.sponsor ? ' | ' + pre.item.sponsor : ''}</div>
+              <div className="lobby-tag right">The show starts in {mmss(view.left)}</div>
+              {pre.item.click_url && <a className="btn small ad-click" href={pre.item.click_url} target="_blank" rel="noopener noreferrer sponsored" onClick={() => { const k = pre.item.id + ':click'; if (!adSent.current.has(k)) { adSent.current.add(k); cinemaAdEvent(pre.item.id, showing.id, 'click') } }}>Learn more</a>}
+            </>
+          )}
+          {pre && pre.phase === 'phone' && (
+            <div className="lobby-card bumper">
+              <svg className="phone-icon" viewBox="0 0 64 64" width="84" height="84" role="img" aria-label="Phone silenced">
+                <rect x="20" y="6" width="24" height="46" rx="5" fill="none" stroke="currentColor" strokeWidth="3" />
+                <line x1="29" y1="45" x2="35" y2="45" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                <line x1="12" y1="56" x2="52" y2="4" stroke="#e5484d" strokeWidth="4" strokeLinecap="round" />
+              </svg>
+              <h2>Please silence your mobile phone</h2>
+              <p className="note">Do not forget to mute your phone before the movie starts. No talking or texting during the show. Thank you!</p>
+              <p className="count">Starting in {mmss(view.left)}</p>
+            </div>
+          )}
+          {pre && pre.phase === 'feature' && (
+            <div className="lobby-card bumper">
+              <p className="eyebrow">Festaview Cinemas presents</p>
+              <h2>{info.title}</h2>
+              <p className="note">Feature presentation</p>
+            </div>
+          )}
+          {pre && pre.phase === 'gap' && !info.preroll_url && !cast.on && (
             <div className="lobby-card">
               <p className="eyebrow">The doors are open</p>
               <h2>{info.title}</h2>
@@ -224,7 +268,10 @@ export default function CinemaRoom({ showing, onLeave }) {
               <p className="note">Find your seat. The film starts at {fmtTime(info.starts_at)} for everyone.</p>
             </div>
           )}
-          {view.phase === 'lobby' && info.preroll_url && <div className="lobby-tag">Starts in {mmss(view.left)}{info.sponsor_name ? ' | ' + info.sponsor_name : ''}</div>}
+          {pre && pre.phase === 'gap' && info.preroll_url && <div className="lobby-tag">Starts in {mmss(view.left)}{info.sponsor_name ? ' | ' + info.sponsor_name : ''}</div>}
+          {blocked && !cast.on && view.phase !== 'after' && view.phase !== 'ended' && (
+            <div className="lobby-card bumper play-gate"><button type="button" className="btn" onClick={() => { const v = videoRef.current; if (v) v.play().then(() => setBlocked(false)).catch(() => {}) }}>Tap to start the show</button><p className="note">Your browser needs a tap to play with sound.</p></div>
+          )}
           {view.phase === 'after' && (
             <div className="lobby-card">
               <p className="eyebrow">Thanks for watching</p>

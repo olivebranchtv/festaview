@@ -253,6 +253,12 @@ export async function cinemaJoin(id) {
   } catch { return { status: 'error' } }
 }
 
+// Counts one ad event (start, complete or click) for the advertiser. Fire and forget: never blocks the film.
+export function cinemaAdEvent(adId, showingId, event) {
+  if (!supabase) return
+  try { supabase.rpc('cinema_ad_event', { p_ad: adId, p_showing: showingId, p_device: deviceId(), p_event: event, p_code: ticketFor(showingId) || null }).then(() => {}, () => {}) } catch { /* ignore */ }
+}
+
 export async function cinemaReserve(id) {
   if (!supabase) { demoSeats(id); return { status: 'ok' } }
   try {
@@ -303,6 +309,17 @@ function demoCinema() {
   const showings = DEMO_SHOWINGS.map((s) => ({ ...s, taken: s.taken + ((demoSeatSets[s.id] && demoSeatSets[s.id].size) || 0) }))
   return { screens, showings }
 }
+// Demo reel: two ads then a trailer, filling the window like the real one (the doors-open time minus 30 seconds).
+function demoPreshow(s) {
+  const win = Math.max(0, s.lobby_minutes * 60 - 30)
+  if (!win) return []
+  const each = Math.floor(win / 3)
+  return [
+    { id: 'demo-ad-1', kind: 'ad', title: 'Lighthouse Coffee', url: DEMO_TRAILER, dur: each, click_url: 'https://example.com/coffee', sponsor: 'Lighthouse Coffee' },
+    { id: 'demo-ad-2', kind: 'ad', title: 'Harbor Books', url: DEMO_TRAILER, dur: each, click_url: null, sponsor: 'Harbor Books' },
+    { id: 'demo-trailer-1', kind: 'trailer', title: 'Coming soon: The Last Ferry', url: DEMO_TRAILER, dur: each, click_url: null },
+  ]
+}
 function demoCinemaJoin(id) {
   const s = DEMO_SHOWINGS.find((x) => x.id === id)
   if (!s) return { status: 'not_found' }
@@ -320,6 +337,6 @@ function demoCinemaJoin(id) {
   const films = s.film_ids.map((fid) => DEMO.films.find((m) => m.id === fid)).filter(Boolean).map((m) => ({ id: m.id, title: m.title, video_url: m.video_url || DEMO_TRAILER, poster_url: m.poster_url || null, duration_sec: m.duration_sec || 128, festival_id: m.festival_id }))
   return {
     status: 'ok', server_now: now, kind: s.kind, title: s.title, festival_id: s.festival_id, starts_at: s.starts_at, lobby_open: new Date(lobbyOpen).toISOString(), ends_at: new Date(end).toISOString(),
-    runtime_min: s.runtime_min, qa_minutes: s.qa_minutes, films, live_stream_url: s.live_stream_url, preroll_url: s.preroll_url, sponsor_name: s.sponsor_name, chat_enabled: true,
+    runtime_min: s.runtime_min, qa_minutes: s.qa_minutes, films, live_stream_url: s.live_stream_url, preroll_url: s.preroll_url, sponsor_name: s.sponsor_name, chat_enabled: true, preshow: demoPreshow(s),
   }
 }
