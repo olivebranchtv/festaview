@@ -1185,7 +1185,7 @@ function GettingStarted({ festival, goTab }) {
 
 const EMPTY_SHOWING = {
   kind: 'film', title: '', description: '', poster_url: '', film_ids: [], live_stream_url: '', live_runtime: '', preroll_url: '', sponsor_name: '',
-  rating: '', screen_id: '', starts_at: '', lobby: '10', qa: '0', seats: '',
+  rating: '', screen_id: '', starts_at: '', lobby: '10', qa: '0', seats: '', price: '',
 }
 
 // Book a showing in the Festaview virtual theater: pick a title, a screen and a start time.
@@ -1210,6 +1210,7 @@ function CinemaTab({ festival, setMsg }) {
   const eligible = films.filter((m) => m.video_url && ((Number(m.duration_sec) || 0) > 0 || (Number(m.runtime_min) || 0) > 0))
   const secsOf = (m) => Number(m.duration_sec) || (Number(m.runtime_min) || 0) * 60
   const runtimeMin = f.kind === 'live' ? Number(f.live_runtime) || 0 : Math.ceil(f.film_ids.reduce((a, id) => { const m = films.find((x) => x.id === id); return a + (m ? secsOf(m) : 0) }, 0) / 60)
+  const priceCents = f.price === '' ? 0 : Math.round(parseFloat(String(f.price).replace(/[$,]/g, '')) * 100) || 0
   const startMs = f.starts_at ? new Date(f.starts_at).getTime() : 0
   const endsAt = startMs && runtimeMin ? new Date(startMs + (runtimeMin + (parseInt(f.qa, 10) || 0)) * 60000) : null
   const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return '' } })()
@@ -1231,13 +1232,15 @@ function CinemaTab({ festival, setMsg }) {
     if (!f.starts_at) { setMsg('Choose a start time.', true); return }
     if (f.kind !== 'live' && f.film_ids.length === 0) { setMsg('Choose at least one film.', true); return }
     if (f.kind === 'live' && (!f.live_stream_url.trim() || !(runtimeMin > 0))) { setMsg('A live showing needs a stream link and how long it runs.', true); return }
+    if (f.price !== '' && priceCents !== 0 && (priceCents < 50 || priceCents > 100000)) { setMsg('A ticket costs between $0.50 and $1,000, or leave it empty for free.', true); return }
+    if (priceCents > 0 && !festival.payments_enabled) { setMsg('Card payments are not turned on for your festival yet, so tickets must be free. Ask Festaview to enable payments.', true); return }
     setBusy(true)
     try {
       const res = await api.bookShowing({
         festival_id: festival.id, screen_id: f.screen_id, kind: f.kind, title: f.title.trim(), description: f.description, poster_url: f.poster_url,
         film_ids: f.kind === 'live' ? [] : f.film_ids, live_stream_url: f.live_stream_url, preroll_url: f.preroll_url, sponsor_name: f.sponsor_name, rating: f.rating,
         starts_at: new Date(f.starts_at).toISOString(), lobby: parseInt(f.lobby, 10) || 0, qa: parseInt(f.qa, 10) || 0, seats: f.seats === '' ? null : parseInt(f.seats, 10),
-        live_runtime: f.kind === 'live' ? runtimeMin : null, runtime_min: runtimeMin,
+        live_runtime: f.kind === 'live' ? runtimeMin : null, runtime_min: runtimeMin, price_cents: priceCents,
       })
       setMsg(res && res.status === 'pending' ? 'Showing submitted. It will appear after Festaview approves it.' : 'Showing booked. It is on the marquee.')
       setF({ ...EMPTY_SHOWING, film_ids: [] })
@@ -1309,6 +1312,7 @@ function CinemaTab({ festival, setMsg }) {
             <Field label="Doors open (minutes early)"><input value={f.lobby} onChange={(e) => set('lobby')(e.target.value)} inputMode="numeric" /></Field>
             <Field label="Q&A after the film (minutes)"><input value={f.qa} onChange={(e) => set('qa')(e.target.value)} inputMode="numeric" /></Field>
             <Field label="Seats (leave empty for open seating)"><input value={f.seats} onChange={(e) => set('seats')(e.target.value)} inputMode="numeric" /></Field>
+            <Field label="Ticket price in dollars (empty = free)" hint={festival.payments_enabled ? 'Buyers pay by card. Festaview keeps its platform fee.' : 'Card payments must be turned on for your festival first.'}><input value={f.price} onChange={(e) => set('price')(e.target.value)} inputMode="decimal" placeholder="0.00" /></Field>
           </div>
           <ImageField label="Poster" value={f.poster_url} onChange={set('poster_url')} festivalId={festival.id} onError={(m) => setMsg(m, true)} />
           <div className="two">
@@ -1330,7 +1334,7 @@ function CinemaTab({ festival, setMsg }) {
               <li key={s.id}>
                 <div>
                   <strong>{s.title}</strong>
-                  <small>{sc ? sc.name : 'Screen'} | {local(s.starts_at)} | {s.runtime_min} min | {(taken[s.id] || 0)}{s.seats ? ' of ' + s.seats : ''} seats taken</small>
+                  <small>{sc ? sc.name : 'Screen'} | {local(s.starts_at)} | {s.runtime_min} min | {(taken[s.id] || 0)}{s.seats ? ' of ' + s.seats : ''} seats taken | {s.price_cents > 0 ? '$' + (s.price_cents / 100).toFixed(2) + ' ticket' : 'Free'}</small>
                 </div>
                 <span className={'pill ' + (s.status === 'scheduled' ? 'published' : s.status === 'pending' ? 'draft' : 'draft')}>{s.status === 'pending' ? 'awaiting approval' : s.status}</span>
                 {s.status === 'scheduled' && <a className="btn ghost" href={'/cinema/' + s.id}>View</a>}

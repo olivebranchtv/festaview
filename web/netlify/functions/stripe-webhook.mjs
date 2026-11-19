@@ -17,6 +17,8 @@ export default async (req) => {
 
   const s = event.data && event.data.object
   if (!s || s.payment_status !== 'paid') return json({ received: true })
+  const showingId = s.metadata && s.metadata.showing_id
+  if (showingId) return sellTicket(s, showingId, e)
   const productId = s.metadata && s.metadata.product_id
   if (!productId) return json({ received: true })
 
@@ -46,5 +48,30 @@ export default async (req) => {
   })
   // If saving failed, answer with an error so Stripe tries again later.
   if (!ins.ok) return json({ error: 'Could not record the purchase' }, 500)
+  return json({ received: true })
+}
+
+// A virtual theater ticket. If the last seat was taken by someone else while this buyer was paying, refund them in full.
+async function sellTicket(s, showingId, e) {
+  const sr = await sb('cinema_showings?id=eq.' + showingId + '&select=festival_id')
+  const fid = sr.ok && sr.data && sr.data[0] && sr.data[0].festival_id
+  const fr = fid ? await sb('festivals?id=eq.' + fid + '&select=ticket_fee_pct') : null
+  const pct = fr && fr.ok && fr.data && fr.data[0] ? fr.data[0].ticket_fee_pct : 0
+  const amount = Number(s.amount_total || 0)
+  const res = await fetch(e.supabaseUrl + '/rest/v1/rpc/cinema_sell_ticket', {
+    method: 'POST',
+    headers: { apikey: e.serviceKey, Authorization: 'Bearer ' + e.serviceKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_showing: showingId, p_session: s.id, p_email: (s.customer_details && s.customer_details.email) || '', p_amount: amount, p_fee: feeCents(amount, pct) }),
+  })
+  const out = await res.json().catch(() => null)
+  if (!res.ok || !out) return json({ error: 'Could not record the ticket' }, 500)
+  if ((out.status === 'sold_out' || out.status === 'unavailable') && s.payment_intent && e.stripeKey) {
+    const rf = await fetch('https://api.stripe.com/v1/refunds', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + e.stripeKey, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ payment_intent: s.payment_intent, reason: 'requested_by_customer' }).toString(),
+    })
+    if (!rf.ok) return json({ error: 'Could not refund' }, 500)
+  }
   return json({ received: true })
 }

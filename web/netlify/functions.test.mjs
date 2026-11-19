@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { verifyStripeSignature, makeCode, feeCents, checkoutParams } from './lib/pay.mjs'
+import { verifyStripeSignature, makeCode, feeCents, checkoutParams, ticketCheckoutParams } from './lib/pay.mjs'
 import checkout from './functions/checkout.mjs'
 import webhook from './functions/stripe-webhook.mjs'
 import vstart from './functions/virtual-start.mjs'
@@ -133,6 +133,61 @@ r = await vpost({ eventId: '44444444-4444-4444-4444-444444444444', code: 'x'.rep
 ok('virtual-start rejects oversized input', r.status === 400)
 r = await vstart(new Request('https://site.example/x', { method: 'GET' }), {})
 ok('virtual-start GET rejected', r.status === 405)
+
+
+// --- virtual theater tickets
+const SH = '44444444-4444-4444-4444-444444444444', FREE = '55555555-5555-4555-8555-555555555555'
+db.cinema_showings = [
+  { id: SH, title: 'Premiere Night', price_cents: 1200, seats: 1, festival_id: 'f1', status: 'scheduled', starts_at: new Date(Date.now() + 3600e3).toISOString(), runtime_min: 90, qa_minutes: 0 },
+  { id: FREE, title: 'Free Show', price_cents: 0, seats: null, festival_id: 'f1', status: 'scheduled', starts_at: new Date(Date.now() + 3600e3).toISOString(), runtime_min: 90, qa_minutes: 0 },
+]
+db.cinema_tickets = []
+const refunds = []
+const prevFetch = globalThis.fetch
+globalThis.fetch = async (url, opts = {}) => {
+  const u = new URL(String(url))
+  if (u.host === 'api.stripe.com' && u.pathname.endsWith('/refunds')) { refunds.push(String(opts.body)); return new Response('{}', { status: 200 }) }
+  if (u.pathname.endsWith('/rpc/cinema_sell_ticket')) {
+    const a = JSON.parse(opts.body)
+    const ex = db.cinema_tickets.find((t) => t.stripe_session_id === a.p_session)
+    if (ex) return new Response(JSON.stringify({ status: 'ok', code: ex.code }), { status: 200 })
+    const s = db.cinema_showings.find((x) => x.id === a.p_showing)
+    if (s.seats != null && db.cinema_tickets.length >= s.seats) return new Response(JSON.stringify({ status: 'sold_out' }), { status: 200 })
+    const t = { showing_id: a.p_showing, code: 'FV-TEST-0000-0001', stripe_session_id: a.p_session, amount_cents: a.p_amount, fee_cents: a.p_fee, email: a.p_email }
+    db.cinema_tickets.push(t)
+    return new Response(JSON.stringify({ status: 'ok', code: t.code }), { status: 200 })
+  }
+  return prevFetch(url, opts)
+}
+const tp = ticketCheckoutParams({ showing: db.cinema_showings[0], festival: { id: 'f1', name: 'Fest', slug: 'fest' }, siteUrl: 'https://site.example' })
+ok('ticket checkout uses the database price', tp.get('line_items[0][price_data][unit_amount]') === '1200' && tp.get('metadata[showing_id]') === SH)
+ok('ticket checkout returns to the showing page', tp.get('success_url') === 'https://site.example/cinema/' + SH + '?session_id={CHECKOUT_SESSION_ID}')
+r = await post(checkout, { showingId: SH })
+ok('ticket checkout returns a stripe url', r.status === 200 && (await r.json()).url.includes('stripe'))
+r = await post(checkout, { showingId: SH, price_cents: 1 })
+ok('browser cannot change the ticket price', r.status === 200 && tp.get('line_items[0][price_data][unit_amount]') === '1200')
+r = await post(checkout, { showingId: FREE })
+ok('free showing cannot be bought', r.status === 400)
+r = await post(checkout, { showingId: 'bad' })
+ok('bad showing id rejected', r.status === 400)
+db.festivals[0].payments_enabled = false
+r = await post(checkout, { showingId: SH })
+ok('tickets need payments turned on for the festival', r.status === 403)
+db.festivals[0].payments_enabled = true
+const tev = (id, pi) => JSON.stringify({ type: 'checkout.session.completed', data: { object: { id, payment_intent: pi, payment_status: 'paid', amount_total: 1200, customer_details: { email: 'f@x.com' }, metadata: { showing_id: SH, festival_id: 'f1' } } } })
+let b1 = tev('cs_ticket_first1234', 'pi_1')
+r = await post(webhook, b1, { 'stripe-signature': sign(b1) })
+ok('paid ticket creates a ticket with fee recorded', r.status === 200 && db.cinema_tickets.length === 1 && db.cinema_tickets[0].fee_cents === 60)
+r = await post(webhook, b1, { 'stripe-signature': sign(b1) })
+ok('replayed ticket payment does not sell a second seat', db.cinema_tickets.length === 1 && refunds.length === 0)
+r = await post(checkout, { showingId: SH })
+ok('sold out showing cannot start a new payment', r.status === 409)
+let b2 = tev('cs_ticket_second123', 'pi_2')
+r = await post(webhook, b2, { 'stripe-signature': sign(b2) })
+ok('buyer who lost the last seat is refunded in full', r.status === 200 && db.cinema_tickets.length === 1 && refunds.length === 1 && refunds[0].includes('pi_2'))
+r = await claim(new Request('https://site.example/x?session_id=cs_ticket_first1234'))
+const cj = await r.json()
+ok('claim returns the ticket code and showing', cj.status === 'ready' && cj.ticketCode === 'FV-TEST-0000-0001' && cj.showingId === SH)
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed')
 process.exit(fail ? 1 : 0)

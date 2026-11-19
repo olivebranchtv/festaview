@@ -229,10 +229,26 @@ export async function loadCinema() {
 }
 
 // Takes a seat if needed and returns everything the room needs, including the server clock.
+// Ticket codes for paid showings are kept on the buyer's device.
+export const ticketFor = (id) => { try { return localStorage.getItem('fv_ticket_' + id) || '' } catch { return '' } }
+export const storeTicket = (id, code) => { try { localStorage.setItem('fv_ticket_' + id, code) } catch { /* storage unavailable */ } }
+export const money = (cents) => '$' + (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2))
+
+// Starts a card payment for one ticket. The price comes from the database on the server.
+export async function buyTicket(showingId) {
+  if (!supabase) { storeTicket(showingId, 'FV-DEMO-TICK-ET00'); return { ok: true, demo: true } }
+  try {
+    const res = await fetch('/.netlify/functions/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ showingId }) })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok || !j.url) return { ok: false, message: j.error || 'Payments are not available right now.' }
+    return { ok: true, url: j.url }
+  } catch { return { ok: false, message: 'Payments are not available right now.' } }
+}
+
 export async function cinemaJoin(id) {
   if (!supabase) return demoCinemaJoin(id)
   try {
-    const r = await supabase.rpc('cinema_join', { p_showing: id, p_device: deviceId() })
+    const r = await supabase.rpc('cinema_join', { p_showing: id, p_device: deviceId(), p_code: ticketFor(id) || null })
     return r.error || !r.data ? { status: 'error' } : r.data
   } catch { return { status: 'error' } }
 }
@@ -257,7 +273,7 @@ export async function cinemaPostChat(id, name, body, kind) {
     list.push({ id: Date.now(), name: name || 'Guest', body, kind, answered: false, created_at: new Date().toISOString() })
     return 'ok'
   }
-  const r = await supabase.rpc('cinema_post_chat', { p_showing: id, p_device: deviceId(), p_name: name || '', p_body: body, p_kind: kind || 'chat' })
+  const r = await supabase.rpc('cinema_post_chat', { p_showing: id, p_device: deviceId(), p_name: name || '', p_body: body, p_kind: kind || 'chat', p_code: ticketFor(id) || null })
   return r.error ? 'error' : r.data
 }
 
@@ -273,11 +289,11 @@ const mk = (id, screen, fest, kind, title, filmIds, startOffsetSec, lobby, runti
   film_ids: filmIds, live_stream_url: kind === 'live' ? DEMO_TRAILER : null, preroll_url: extra.preroll_url || null, sponsor_name: extra.sponsor_name || null,
   starts_at: new Date(T0 + startOffsetSec * 1000).toISOString(), lobby_minutes: lobby, runtime_min: runtimeMin, qa_minutes: extra.qa || 0,
   ends_at: new Date(T0 + (startOffsetSec + (runtimeMin + (extra.qa || 0)) * 60) * 1000).toISOString(),
-  seats: extra.seats == null ? null : extra.seats, taken: extra.taken || 0, access: 'free', chat_enabled: true,
+  seats: extra.seats == null ? null : extra.seats, taken: extra.taken || 0, access: extra.price ? 'ticketed' : 'free', price_cents: extra.price || 0, chat_enabled: true,
 })
 const DEMO_SHOWINGS = [
   mk('cs1', 1, DEMO.festivals[0], 'film', 'The Sparrows Nesting', ['m0'], -30, 10, 3, { description: 'A film already in progress. Join late and you start at the live point.', rating: 'PG' }),
-  mk('cs2', 2, DEMO.festivals[1], 'program', 'Midnight Shorts Program', ['m3', 'm4'], 40, 10, 5, { description: 'Two horror shorts back to back. The lobby is open now.', preroll_url: DEMO_TRAILER, sponsor_name: 'Lighthouse Coffee', qa: 2 }),
+  mk('cs2', 2, DEMO.festivals[1], 'program', 'Midnight Shorts Program', ['m3', 'm4'], 40, 10, 5, { description: 'Two horror shorts back to back. The lobby is open now.', preroll_url: DEMO_TRAILER, sponsor_name: 'Lighthouse Coffee', qa: 2, price: 800 }),
   mk('cs3', 3, DEMO.festivals[0], 'live', 'Live Q&A with the filmmakers', [], 20 * 60, 10, 20, { description: 'A live conversation. The lobby opens ten minutes early.' }),
   mk('cs4', 1, DEMO.festivals[2], 'film', 'Seven Minutes', ['m5'], 24 * 3600, 10, 3, { description: 'Tomorrow at the same time.', seats: 100 }),
   mk('cs5', 4, DEMO.festivals[2], 'film', 'Paper Moon', ['m6'], 2 * 3600, 10, 3, { description: 'This one is sold out.', seats: 2, taken: 2 }),
@@ -296,6 +312,7 @@ function demoCinemaJoin(id) {
   const end = start + (s.runtime_min + s.qa_minutes) * 60000
   if (now < lobbyOpen) return { status: 'too_early', opens_at: new Date(lobbyOpen).toISOString(), starts_at: s.starts_at, server_now: now }
   if (now > end) return { status: 'ended' }
+  if (s.price_cents > 0 && !ticketFor(id)) return { status: 'ticket_required' }
   const taken = s.taken + ((demoSeatSets[id] && demoSeatSets[id].size) || 0)
   const mine = demoSeatSets[id] && demoSeatSets[id].has(deviceId())
   if (!mine && s.seats != null && taken >= s.seats) return { status: 'full' }

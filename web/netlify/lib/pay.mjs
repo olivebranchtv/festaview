@@ -59,6 +59,21 @@ export function makeCode() {
 
 export const feeCents = (amountCents, pct) => Math.round((Number(amountCents) * Number(pct || 0)) / 100)
 
+// A ticket to a virtual theater showing. The price comes from the database.
+export function ticketCheckoutParams({ showing, festival, siteUrl }) {
+  const p = new URLSearchParams()
+  p.set('mode', 'payment')
+  p.set('line_items[0][quantity]', '1')
+  p.set('line_items[0][price_data][currency]', 'usd')
+  p.set('line_items[0][price_data][unit_amount]', String(showing.price_cents))
+  p.set('line_items[0][price_data][product_data][name]', 'Ticket: ' + showing.title + ' - ' + festival.name)
+  p.set('success_url', siteUrl + '/cinema/' + showing.id + '?session_id={CHECKOUT_SESSION_ID}')
+  p.set('cancel_url', siteUrl + '/cinema/' + showing.id)
+  p.set('metadata[showing_id]', showing.id)
+  p.set('metadata[festival_id]', festival.id)
+  return p
+}
+
 // The price always comes from the database, never from the browser.
 export function checkoutParams({ product, festival, siteUrl }) {
   const p = new URLSearchParams()

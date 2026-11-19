@@ -139,7 +139,7 @@ export default function CinemaRoom({ showing, onLeave }) {
     )
   }
   if (state.status !== 'ok') {
-    const text = { full: 'This showing is sold out.', ended: 'This showing has ended.', not_found: 'This showing is not available.' }[state.status] || 'Something went wrong. Please try again.'
+    const text = { ticket_required: 'This showing needs a ticket. Go back to the showing page to buy one or enter your ticket code.', full: 'This showing is sold out.', ended: 'This showing has ended.', not_found: 'This showing is not available.' }[state.status] || 'Something went wrong. Please try again.'
     return <div className="access"><h2 className="h3">{text}</h2><p><button className="btn ghost" onClick={onLeave}>Back to the showing</button></p></div>
   }
 

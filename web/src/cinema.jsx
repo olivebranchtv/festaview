@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { loadCinema, cinemaReserve } from './data.js'
+import { loadCinema, cinemaReserve, buyTicket, ticketFor, storeTicket, claimAccess, money } from './data.js'
 import { cinemaPath, festivalPath } from './paths.js'
 import { useSeo } from './seo.js'
 import { bg } from './ui.jsx'
@@ -30,6 +30,7 @@ export function showState(s, now = Date.now()) {
   return { key: 'soon', label: 'Starts ' + fmtTime(s.starts_at) }
 }
 const seatsLeft = (s) => (s.seats == null ? null : Math.max(0, s.seats - (s.taken || 0)))
+const priceText = (s) => (s.price_cents > 0 ? money(s.price_cents) + ' ticket' : 'Free')
 const seatText = (s) => { const l = seatsLeft(s); return l === null ? 'Open seating' : l === 0 ? 'Sold out' : l + (l === 1 ? ' seat left' : ' seats left') }
 const mmss = (sec) => { const m = Math.floor(sec / 60), r = sec % 60; return m + ':' + String(r).padStart(2, '0') }
 
@@ -57,7 +58,7 @@ function ShowingCard({ s }) {
       <span className="show-meta">{[s.rating, s.runtime_min + ' min', s.kind === 'live' ? 'Live' : s.kind === 'program' ? 'Program' : null].filter(Boolean).join(' | ')}</span>
       <span className="show-meta">{s.festival_name}</span>
       <span className={'show-state' + (st.key === 'playing' || st.key === 'lobby' || st.key === 'qa' ? ' live' : '')}>
-        {st.key === 'playing' ? 'Now showing. Join at ' + mmss(st.into) : st.label}{st.key !== 'ended' ? ' | ' + seatText(s) : ''}
+        {st.key === 'playing' ? 'Now showing. Join at ' + mmss(st.into) : st.label}{st.key !== 'ended' ? ' | ' + seatText(s) + ' | ' + priceText(s) : ''}
       </span>
     </a>
   )
@@ -143,6 +144,25 @@ export function ShowingPage({ id }) {
   const [inRoom, setInRoom] = useState(false)
   const [reserved, setReserved] = useState(false)
   const [msg, setMsg] = useState('')
+  const [code, setCode] = useState(() => ticketFor(id))
+  const [typed, setTyped] = useState('')
+  const [paying, setPaying] = useState(false)
+  const [note, setNote] = useState('')
+  // Coming back from the card payment page: collect the new ticket code.
+  useEffect(() => {
+    const sid = new URLSearchParams(window.location.search).get('session_id')
+    if (!sid || code) return
+    let stop = false, tries = 0
+    setNote('Confirming your payment...')
+    const poll = async () => {
+      const j = await claimAccess(sid)
+      if (stop) return
+      if (j.status === 'ready' && j.ticketCode && j.showingId === id) { storeTicket(id, j.ticketCode); setCode(j.ticketCode); setNote(''); return }
+      if (++tries < 20) setTimeout(poll, 2500); else setNote('Your payment is still being confirmed. Refresh this page in a minute, or contact the festival if you were charged.')
+    }
+    poll()
+    return () => { stop = true }
+  }, [id, code])
   useSeo(s ? { title: s.title + ': Virtual Theater Showing', description: (s.description || 'Watch ' + s.title + ' in the Festaview virtual theater.') + ' ' + s.screen_name + '.', canonicalPath: cinemaPath(s), image: s.poster_url || undefined } : { title: c ? 'Showing not found' : 'Virtual theater', robots: c ? 'noindex' : 'index,follow' })
   if (!c) return <section className="block"><p className="note">Loading...</p></section>
   if (!s) return <NotFoundPage />
@@ -154,6 +174,20 @@ export function ShowingPage({ id }) {
     setMsg('')
     const r = await cinemaReserve(s.id)
     if (r.status === 'ok') setReserved(true); else setMsg(r.status === 'full' ? 'Sorry, this showing is sold out.' : 'Could not reserve a seat. Please try again.')
+  }
+
+  const paid = s.price_cents > 0
+  const buy = async () => {
+    setMsg(''); setPaying(true)
+    const r = await buyTicket(s.id)
+    if (r.ok && r.demo) { setCode(ticketFor(s.id)); setPaying(false); return }
+    if (r.ok) { window.location.href = r.url; return }
+    setMsg(r.message); setPaying(false)
+  }
+  const useCode = () => {
+    const c = typed.trim().toUpperCase()
+    if (!/^FV-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c)) { setMsg('That does not look like a ticket code. It starts with FV-.'); return }
+    storeTicket(s.id, c); setCode(c); setMsg(''); setTyped('')
   }
 
   if (inRoom) {
@@ -182,16 +216,27 @@ export function ShowingPage({ id }) {
             <li><span className={'pill ' + (st.open ? 'live' : st.key === 'ended' ? 'draft' : 'published')}>{st.label}</span></li>
             <li>{fmtFull(s.starts_at)}</li>
             <li>{seatText(s)}</li>
+            <li>{priceText(s)}</li>
             <li>Doors open {s.lobby_minutes} minutes early</li>
           </ul>
           {st.key === 'ended' && <p className="note">This showing has ended. <a href="/cinema">See what is playing now</a>.</p>}
           {st.key !== 'ended' && (
             <div className="actions">
-              {st.open && !sold && <button className="btn" onClick={() => setInRoom(true)}>{st.key === 'playing' ? 'Join now at ' + mmss(st.into) : st.key === 'qa' ? 'Join the conversation' : 'Enter the theater'}</button>}
-              {!st.open && !sold && !reserved && <button className="btn" onClick={reserve}>Reserve a seat</button>}
+              {paid && !code && !sold && st.key !== 'ended' && <button className="btn" onClick={buy} disabled={paying}>{paying ? 'Opening payment...' : 'Buy a ticket for ' + money(s.price_cents)}</button>}
+              {st.open && !sold && (!paid || code) && <button className="btn" onClick={() => setInRoom(true)}>{st.key === 'playing' ? 'Join now at ' + mmss(st.into) : st.key === 'qa' ? 'Join the conversation' : 'Enter the theater'}</button>}
+              {!paid && !st.open && !sold && !reserved && <button className="btn" onClick={reserve}>Reserve a seat</button>}
+              {paid && code && !st.open && <span className="ok">You have a ticket. Come back when the doors open.</span>}
               {!st.open && !sold && reserved && <span className="ok">Seat reserved. Come back when the doors open.</span>}
-              {sold && <span className="btn disabled">Sold out</span>}
+              {sold && !code && <span className="btn disabled">Sold out</span>}
               {st.key !== 'ended' && <button className="btn ghost" onClick={() => downloadIcs(s)}>Add to calendar</button>}
+            </div>
+          )}
+          {note && <p className="note">{note}</p>}
+          {paid && code && <p className="note">Your ticket code: <strong>{code}</strong>. It is saved on this device. Keep it to watch from another device.</p>}
+          {paid && !code && st.key !== 'ended' && (
+            <div className="inline-form">
+              <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Already bought? Enter your ticket code" aria-label="Ticket code" />
+              <button type="button" className="btn ghost" onClick={useCode}>Use code</button>
             </div>
           )}
           {msg && <p className="error">{msg}</p>}

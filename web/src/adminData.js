@@ -496,7 +496,7 @@ export async function bookShowing(a) {
   const r = await supabase.rpc('book_showing', {
     p_festival: a.festival_id, p_screen: a.screen_id, p_kind: a.kind, p_title: a.title, p_description: a.description || null, p_poster: a.poster_url || null,
     p_film_ids: a.film_ids || [], p_live_url: a.live_stream_url || null, p_preroll: a.preroll_url || null, p_sponsor: a.sponsor_name || null, p_rating: a.rating || null,
-    p_starts_at: a.starts_at, p_lobby: a.lobby, p_qa: a.qa, p_seats: a.seats === '' || a.seats == null ? null : a.seats, p_live_runtime: a.live_runtime || null,
+    p_starts_at: a.starts_at, p_lobby: a.lobby, p_qa: a.qa, p_seats: a.seats === '' || a.seats == null ? null : a.seats, p_live_runtime: a.live_runtime || null, p_price_cents: a.price_cents || 0,
   })
   if (r.error) throw r.error
   return r.data
