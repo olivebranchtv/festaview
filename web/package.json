@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:functions": "node netlify/functions.test.mjs"
+    "test:functions": "node netlify/functions.test.mjs",
+    "test:seo": "node netlify/seo.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",

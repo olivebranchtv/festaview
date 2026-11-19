@@ -41,7 +41,7 @@ function Login({ onDone }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr] = useState('')
-  const [signup, setSignup] = useState(() => /[?&]signup=1/.test(window.location.search + window.location.hash))
+  const [signup, setSignup] = useState(() => /[?&]signup=1/.test(window.location.search))
   const [info, setInfo] = useState('')
   const submit = async (e) => {
     e.preventDefault()
@@ -451,7 +451,7 @@ function ScreeningsTab({ festival, setMsg }) {
         </div>
         <div className="actions">
           <button type="button" className="btn" onClick={addScreening}>Add screening</button>
-          <a className="btn ghost" href={'#/theater/' + festival.slug}>Open Theater Mode</a>
+          <a className="btn ghost" href={'/theater/' + festival.slug}>Open Theater Mode</a>
         </div>
       </div>
     </div>
@@ -960,7 +960,7 @@ function VirtualTab({ festival, setMsg }) {
               <small>{{ screening: 'Screening', program: 'Program', live: 'Live event' }[ev.kind]} | {ev.access === 'ticketed' ? 'Ticketed' : 'Free'}{ev.available_from ? ' | from ' + when(ev.available_from) : ''}{ev.available_until ? ' until ' + when(ev.available_until) : ''} | {counts[ev.id] || 0} watching{ev.capacity ? ' of ' + ev.capacity : ''}</small>
             </div>
             <span className={'pill ' + ev.status}>{ev.status}</span>
-            <a className="btn ghost" href={'#/virtual/' + ev.id}>View</a>
+            <a className="btn ghost" href={'/virtual/' + ev.id}>View</a>
             <button className="btn ghost" onClick={() => openMod(ev)}>Moderate</button>
             <button className="btn ghost" onClick={() => open(ev)}>Edit</button>
             <button className="btn ghost danger" onClick={() => remove(ev)}>Delete</button>

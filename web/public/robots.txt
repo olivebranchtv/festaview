@@ -1,0 +1,90 @@
+# Festaview welcomes search engines and AI search and answer engines.
+# Private areas (admin, owner console, theater mode, payment return page) are never listed.
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+Disallow: /.netlify/
+
+# AI search and answer engines
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: GPTBot
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: Claude-User
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: Applebot
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /admin
+Disallow: /network
+Disallow: /theater/
+Disallow: /access
+
+Sitemap: https://festaview.com/sitemap.xml

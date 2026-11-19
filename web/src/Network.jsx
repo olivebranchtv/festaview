@@ -220,7 +220,7 @@ function Manage({ data, reload, note }) {
               <PaymentsControl f={f} reload={reload} note={note} />
               {f.status !== 'published' && <button className="btn ghost" onClick={() => publish(f, 'published')}>Publish</button>}
               {f.status === 'published' && <button className="btn ghost" onClick={() => publish(f, 'draft')}>Unpublish</button>}
-              <a className="btn ghost" href={'#/festival/' + f.slug}>View</a>
+              <a className="btn ghost" href={'/festival/' + f.slug}>View</a>
             </li>
           ))}
         </ul>
@@ -301,7 +301,7 @@ export default function Network() {
 
   if (!api.isDemo) {
     if (session === undefined) return <p className="note pad">Loading...</p>
-    if (!session) return <p className="note pad">Sign in first at <a href="#/admin">the festival login</a>, then return to this page.</p>
+    if (!session) return <p className="note pad">Sign in first at <a href="/admin">the festival login</a>, then return to this page.</p>
     if (ok === null) return <p className="note pad">Checking access...</p>
     if (!ok) return <p className="note pad">This account is not a network owner.</p>
   }

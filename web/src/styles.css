@@ -443,3 +443,46 @@ button.live-card.playable:hover { transform: translateY(-3px); }
 .steps li.done .tick { color: #5fd68a; }
 .steps li.done span:nth-child(2) { color: var(--muted); text-decoration: line-through; }
 .steps li .btn { margin-left: auto; }
+
+/* ---------- real pages: navigation, breadcrumbs, film page ---------- */
+.skip { position: absolute; left: -9999px; top: 0; background: var(--gold); color: #14110a; padding: 10px 16px; z-index: 300; border-radius: 0 0 8px 0; }
+.skip:focus { left: 0; }
+.nav a { background: none; border: 0; color: var(--muted); padding: 8px 12px; cursor: pointer; border-radius: 8px; font: inherit; }
+.nav a:hover { color: var(--text); background: var(--panel); }
+.nav a[aria-current="page"] { color: var(--gold); }
+.menu-btn { display: none; margin-left: auto; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; font: inherit; }
+.crumbs { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+.crumbs a { color: var(--muted); }
+.crumbs a:hover { color: var(--gold); text-decoration: underline; }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+.sec-head h2 { margin: 0 0 12px; }
+.more { color: var(--gold); font-size: 14px; }
+.more:hover { text-decoration: underline; }
+.h3 { font-size: 17px; margin: 0 0 8px; letter-spacing: 0; }
+.h3::after { display: none !important; }
+a.card { display: block; color: inherit; }
+a.live-card { color: inherit; }
+a.live-card.playable { cursor: pointer; transition: transform .15s; }
+a.live-card.playable:hover { transform: translateY(-3px); }
+.film-page h1 { font-size: clamp(28px, 4vw, 46px); margin: 6px 0 10px; }
+.film-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.film-media .player, .film-media .modal-art { border-radius: 14px; }
+.film-media .modal-art { aspect-ratio: 16 / 9; overflow: hidden; }
+.film-media .modal-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.film-info .meta { color: var(--muted); margin: 4px 0; }
+.film-info .meta a { color: var(--gold); }
+.chan.inline { background: transparent; max-height: none; overflow: visible; }
+.chan.inline .player { border-radius: 14px; }
+.chan.inline .chan-body { padding: 14px 2px; }
+.block h1 { font-size: clamp(28px, 4.5vw, 44px); margin: 4px 0 12px; }
+.pitch .benefit h2.h3 { margin: 0 0 6px; }
+.event-title { font-size: 17px; margin: 0; }
+.fest-name { font-size: 18px; margin: 0; }
+@media (max-width: 800px) {
+  .menu-btn { display: inline-block; }
+  .top { flex-wrap: wrap; }
+  .nav { display: none; flex-basis: 100%; flex-direction: column; gap: 2px; padding: 8px 0; order: 5; }
+  .nav.open { display: flex; }
+  .admin-link { margin-left: 0; }
+  .film-grid { grid-template-columns: minmax(0, 1fr); }
+}

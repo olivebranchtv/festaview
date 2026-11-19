@@ -41,11 +41,11 @@ export function buildChannels(data) {
   const fests = (data.festivals || []).filter((f) => f.auto_channel)
   const out = []
   const mixFilms = (data.films || []).filter((m) => fests.some((f) => f.id === m.festival_id))
-  const mix = make('mix', 1, 'Festaview Mix', mixFilms, 'shuffle', { festivalId: null, color: '#E6B34A', description: 'Films from every festival, all day.' })
+  const mix = make('mix', 1, 'Festaview Mix', mixFilms, 'shuffle', { slug: 'mix', festivalId: null, color: '#E6B34A', description: 'Films from every festival, all day.' })
   if (mix) out.push(mix)
   fests.forEach((f, i) => {
     const ch = make('fest-' + f.id, 2 + i, f.name + ' Channel', (data.films || []).filter((m) => m.festival_id === f.id), f.channel_order || 'listed', {
-      festivalId: f.id, festivalSlug: f.slug, color: f.brand_color || '#E6B34A', description: f.tagline || '',
+      slug: f.slug, festivalId: f.id, festivalSlug: f.slug, color: f.brand_color || '#E6B34A', description: f.tagline || '',
     })
     if (ch) out.push(ch)
   })

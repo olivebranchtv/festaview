@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import { startVirtual, listChat, postChat, reserveEvent, storedCode, storeCode, startCheckout, logView } from './data.js'
 import { eventState, fmtWhen, kindLabel, regionText } from './virtual.js'
+import { useSeo } from './seo.js'
+import { eventPath } from './paths.js'
 
 function attach(video, url, hlsRef) {
   if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
@@ -89,6 +91,11 @@ function ChatPanel({ ev, code }) {
 export default function VirtualRoom({ eventId, data }) {
   const ev = (data.events || []).find((e) => e.id === eventId)
   const fest = ev ? data.festivals.find((f) => f.id === ev.festival_id) : null
+  useSeo(ev ? {
+    title: ev.title + (fest ? ' | ' + fest.name : ''),
+    description: (ev.description || 'Watch ' + ev.title + ' online.') + (fest ? ' A virtual event from ' + fest.name + '.' : ''),
+    canonicalPath: eventPath(ev), image: ev.poster_url || undefined,
+  } : { title: 'Screening not found', robots: 'noindex' })
   const [code, setCode] = useState(() => (ev ? storedCode(ev.festival_id) : ''))
   const [phase, setPhase] = useState('gate')
   const [info, setInfo] = useState(null)
@@ -127,7 +134,7 @@ export default function VirtualRoom({ eventId, data }) {
   }, [phase, idx, queue]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (hlsRef.current) hlsRef.current.destroy() }, [])
 
-  if (!ev) return <section className="block"><p className="note">This screening was not found. <a href="#/">Back to Festaview</a></p></section>
+  if (!ev) return <section className="block"><p className="note">This screening was not found. <a href="/">Back to Festaview</a></p></section>
 
   const st = eventState(ev)
   const eventProducts = (data.products || []).filter((p) => p.festival_id === ev.festival_id && (p.event_id === ev.id || (!p.film_id && !p.event_id)))
@@ -149,7 +156,7 @@ export default function VirtualRoom({ eventId, data }) {
   if (phase === 'playing' || phase === 'ended') {
     return (
       <section className="block room">
-        <a className="back" href={fest ? '#/festival/' + fest.slug : '#/'}>{fest ? fest.name : 'Festaview'}</a>
+        <a className="back" href={fest ? '/festival/' + fest.slug : '/'}>{fest ? fest.name : 'Festaview'}</a>
         <div className={'room-grid' + (ev.chat_enabled ? ' with-chat' : '')}>
           <div>
             {phase === 'playing' && (
@@ -170,7 +177,7 @@ export default function VirtualRoom({ eventId, data }) {
                   : <p className="note">This screening is over.</p>}
                 <div className="actions">
                   {info && info.watch_until && new Date(info.watch_until) > new Date() && <button className="btn" onClick={() => { setIdx(0); setPhase('playing') }}>Watch again</button>}
-                  <a className="btn ghost" href={fest ? '#/festival/' + fest.slug : '#/'}>Back to the festival</a>
+                  <a className="btn ghost" href={fest ? '/festival/' + fest.slug : '/'}>Back to the festival</a>
                 </div>
               </div>
             )}
@@ -187,7 +194,7 @@ export default function VirtualRoom({ eventId, data }) {
   const region = regionText(ev)
   return (
     <section className="block room">
-      <a className="back" href={fest ? '#/festival/' + fest.slug : '#/'}>{fest ? fest.name : 'Festaview'}</a>
+      <a className="back" href={fest ? '/festival/' + fest.slug : '/'}>{fest ? fest.name : 'Festaview'}</a>
       <div className="gate" style={ev.poster_url ? { backgroundImage: 'linear-gradient(90deg, rgba(11,11,18,.95), rgba(11,11,18,.6)), url(' + ev.poster_url + ')' } : undefined}>
         <p className="eyebrow">{kindLabel[ev.kind]}{fest ? ' | ' + fest.name : ''}</p>
         <h1>{ev.title}</h1>

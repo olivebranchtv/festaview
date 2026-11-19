@@ -67,8 +67,8 @@ export function checkoutParams({ product, festival, siteUrl }) {
   p.set('line_items[0][price_data][currency]', product.currency || 'usd')
   p.set('line_items[0][price_data][unit_amount]', String(product.price_cents))
   p.set('line_items[0][price_data][product_data][name]', product.name + ' - ' + festival.name)
-  p.set('success_url', siteUrl + '/#/access?session_id={CHECKOUT_SESSION_ID}')
-  p.set('cancel_url', siteUrl + '/#/festival/' + festival.slug)
+  p.set('success_url', siteUrl + '/access?session_id={CHECKOUT_SESSION_ID}')
+  p.set('cancel_url', siteUrl + '/festival/' + festival.slug)
   p.set('metadata[product_id]', product.id)
   p.set('metadata[festival_id]', festival.id)
   return p

@@ -29,7 +29,7 @@ ok('old timestamp rejected', !verifyStripeSignature(body, sign(body, 'whsec_fake
 ok('missing header rejected', !verifyStripeSignature(body, null, 'whsec_fake'))
 const cp = checkoutParams({ product: { id: 'p1', name: 'Pass', price_cents: 2500, currency: 'usd' }, festival: { id: 'f1', name: 'Fest', slug: 'fest' }, siteUrl: 'https://site.example' })
 ok('checkout uses db price', cp.get('line_items[0][price_data][unit_amount]') === '2500')
-ok('checkout success url has session placeholder', cp.get('success_url') === 'https://site.example/#/access?session_id={CHECKOUT_SESSION_ID}')
+ok('checkout success url has session placeholder', cp.get('success_url') === 'https://site.example/access?session_id={CHECKOUT_SESSION_ID}')
 
 // --- fake database + Stripe
 const db = {

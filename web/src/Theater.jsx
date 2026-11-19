@@ -174,7 +174,7 @@ export default function Theater({ slug }) {
   }
 
   if (session === undefined) return <p className="note pad">Loading...</p>
-  if (!session) return <p className="note pad">Sign in first at <a href="#/admin">the festival login</a>, then open Theater Mode again.</p>
+  if (!session) return <p className="note pad">Sign in first at <a href="/admin">the festival login</a>, then open Theater Mode again.</p>
   if (!festival) return <p className="note pad">{err || 'Loading...'}</p>
 
   const stage = show.phase === 'card' || show.phase === 'playing' || show.phase === 'gap'
@@ -206,7 +206,7 @@ export default function Theater({ slug }) {
 
       {!stage && (
         <div className="wrap-admin">
-          <a className="back" href="#/admin">Back to festival admin</a>
+          <a className="back" href="/admin">Back to festival admin</a>
           <div className="admin-head"><h1>Theater Mode</h1><span className="pill draft">{festival.name}</span></div>
 
           {show.phase === 'done' ? (

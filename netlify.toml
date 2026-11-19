@@ -8,3 +8,56 @@
   # so Netlify's secret scanner must not fail the build on them. NEVER add a secret/service_role key here.
   SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
   SECRETS_SCAN_OMIT_PATHS = "roku/**"
+
+# Sitemap and llms.txt are generated live from the database.
+[[redirects]]
+  from = "/sitemap.xml"
+  to = "/.netlify/functions/seo-files?f=sitemap"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/llms.txt"
+  to = "/.netlify/functions/seo-files?f=llms"
+  status = 200
+  force = true
+
+# Real addresses (/festival/olive-branch, /film/...): any path that is not a file serves the app.
+# The SEO edge function then adds each page's own title, tags, structured data and content.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Private areas must never be indexed.
+[[headers]]
+  for = "/admin*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/network*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/theater/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/access*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+# Built files have unique names, so browsers can keep them for a year.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

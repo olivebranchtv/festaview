@@ -21,7 +21,7 @@ function attach(video, url, hlsRef, start) {
 const timeLabel = (ms) => new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 
 // Plays a channel from where the clock says it should be, then moves on to the next film automatically.
-export default function ChannelPlayer({ channelId, data, onClose }) {
+export default function ChannelPlayer({ channelId, data }) {
   const ch = useMemo(() => buildChannels(data).find((c) => c.id === channelId), [data, channelId])
   const videoRef = useRef(null)
   const hlsRef = useRef(null)
@@ -30,11 +30,6 @@ export default function ChannelPlayer({ channelId, data, onClose }) {
   const [, setTick] = useState(0)
 
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 15000); return () => clearInterval(t) }, [])
-  useEffect(() => {
-    const on = (e) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', on)
-    return () => window.removeEventListener('keydown', on)
-  }, [onClose])
 
   const flush = (film) => {
     const w = watched.current
@@ -63,11 +58,7 @@ export default function ChannelPlayer({ channelId, data, onClose }) {
   useEffect(() => () => { if (hlsRef.current) hlsRef.current.destroy() }, [])
 
   if (!ch || !cur) {
-    return (
-      <div className="modal-back" onClick={onClose}>
-        <div className="modal"><div className="modal-body"><p>This channel has nothing to play yet.</p><button className="btn" onClick={onClose}>Close</button></div></div>
-      </div>
-    )
+    return <p className="note">This channel has nothing to play yet.</p>
   }
 
   const advance = () => {
@@ -86,13 +77,12 @@ export default function ChannelPlayer({ channelId, data, onClose }) {
   const remaining = Math.max(0, cur.item.duration - (videoRef.current ? videoRef.current.currentTime : cur.offset))
 
   return (
-    <div className="modal-back chan-back" onClick={onClose}>
-      <div className="chan" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={ch.name}>
-        <video ref={videoRef} className="player" controls playsInline onEnded={advance} />
+    <div className="chan inline">
+      <div>
+        <video ref={videoRef} className="player" controls playsInline onEnded={advance} aria-label={ch.name} />
         <div className="chan-body">
-          <button className="close" onClick={onClose} aria-label="Close">Close</button>
           <p className="chan-meta"><span className="pill live">Live</span> Channel {ch.number} | {ch.name}</p>
-          <h2>{cur.item.title}</h2>
+          <h2 className="h3">Now playing: {cur.item.title}</h2>
           <p className="meta">{clock(remaining)} remaining{cur.next && ch.items.length > 1 ? '  |  Up next: ' + cur.next.title : ''}</p>
           {upcoming.length > 0 && ch.items.length > 1 && (
             <ul className="schedule chan-sched">
