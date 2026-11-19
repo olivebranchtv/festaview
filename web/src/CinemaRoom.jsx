@@ -35,6 +35,7 @@ export default function CinemaRoom({ showing, onLeave }) {
   const hlsRef = useRef(null)
   const viewRef = useRef(null)
   const [cast, setCast] = useState({ available: false, on: false, name: '' })
+  const [castMsg, setCastMsg] = useState('')
   const castOnRef = useRef(false)
   castOnRef.current = cast.on
   const airplay = typeof window !== 'undefined' && !!window.WebKitPlaybackTargetAvailabilityEvent
@@ -148,7 +149,17 @@ export default function CinemaRoom({ showing, onLeave }) {
     return () => { if (timer) clearTimeout(timer); clearInterval(drift) }
   }, [ok, cast.on]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleCast = () => { if (cast.on) endCast(); else requestCast().catch(() => {}) }
+  const toggleCast = () => {
+    setCastMsg('')
+    if (cast.on) { endCast(); return }
+    requestCast().catch((e) => {
+      const code = String((e && (e.code || e)) || '')
+      if (code === 'cancel') return
+      setCastMsg(code === 'receiver_unavailable'
+        ? 'No TV was found. Your computer and the TV must be on the same Wi-Fi, and the TV must support Chromecast (Chromecast, Google TV, Android TV and many Vizio, Sony, Philips and TCL models). Roku players and TVs do not support Chromecast.'
+        : 'Casting did not start (' + (code || 'unknown reason') + '). Try again, or use the Chrome menu: Cast, save and share, then Cast.')
+    })
+  }
   const showAirplay = () => { const v = videoRef.current; if (v && v.webkitShowPlaybackTargetPicker) v.webkitShowPlaybackTargetPicker() }
 
   // Keep everyone in step: if this viewer drifts more than a few seconds, move to where the room should be.
@@ -238,6 +249,7 @@ export default function CinemaRoom({ showing, onLeave }) {
             <button type="button" className="btn ghost small" onClick={onLeave}>Leave</button>
           </span>
         </div>
+        {castMsg && <p className="error" role="alert">{castMsg}</p>}
         <h1 className="room-title">{info.title}</h1>
         <p className="note small">Showtime {fmtTime(info.starts_at)}. Everyone is watching at the same point, so there is no pause or rewind. To watch on a TV, use Cast to TV (Chrome) or AirPlay (Safari), or open this page in your smart TV's browser.</p>
       </div>
