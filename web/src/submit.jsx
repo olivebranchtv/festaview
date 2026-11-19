@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getSession, onAuth, signIn, signUp, signOut } from './adminData.js'
 import { claimAccess } from './data.js'
-import { loadSubmissionBoard, getQuote, createSubmission, updateSubmission, withdrawSubmission, listMySubmissions, payForSubmission, getProfile, saveProfile, uploadSubmissionFile, removeSubmissionFile } from './submissions.js'
+import { loadSubmissionBoard, getQuote, createSubmission, updateSubmission, withdrawSubmission, listMySubmissions, payForSubmission, getProfile, saveProfile, uploadSubmissionFile, removeSubmissionFile, listMyFilms, saveMyFilm, deleteMyFilm, filmToForm } from './submissions.js'
 import { money, fmtDate, submissionState, STATUS_LABEL, PAY_LABEL } from './submissionRules.js'
 import { submitPath, festivalPath } from './paths.js'
 import { navigate } from './router.js'
@@ -84,6 +84,7 @@ export function SubmitIndexPage() {
   useSeo({ title: 'Submit Your Film to Festivals', description: 'Create one Festaview account, find film festivals that are accepting submissions, enter your short or feature, and pay the entry fee by card.' })
   const [board, setBoard] = useState(null)
   const [err, setErr] = useState('')
+  useEffect(() => { if (session) listMyFilms().then(setFilms).catch(() => {}) }, [session])
   useEffect(() => { loadSubmissionBoard().then(setBoard).catch(() => setErr('Could not load festivals right now. Please refresh in a moment.')) }, [])
   return (
     <section className="block">
@@ -165,20 +166,20 @@ function FileBox({ label, hint, kind, accept, multiple, f, set }) {
   )
 }
 
-function EntryFields({ f, set }) {
+function EntryFields({ f, set, draft }) {
   const bind = (k) => ({ value: f[k] || '', onChange: (e) => set(k, e.target.value) })
   const tick = (k) => ({ checked: !!f[k], onChange: (e) => set(k, e.target.checked) })
   return (
     <>
       <h3>About the film</h3>
       <Field label="Film title"><input {...bind('title')} maxLength={200} required /></Field>
-      <Field label="Director (or directors)"><input {...bind('director')} maxLength={200} required /></Field>
+      <Field label="Director (or directors)"><input {...bind('director')} maxLength={200} required={!draft} /></Field>
       <div className="two">
-        <Field label="Running time (minutes)"><input type="number" min="1" max="1000" {...bind('runtime_min')} required /></Field>
+        <Field label="Running time (minutes)"><input type="number" min="1" max="1000" {...bind('runtime_min')} required={!draft} /></Field>
         <Field label="Year completed"><input type="number" min="1890" max="2100" {...bind('year')} /></Field>
       </div>
       <Field label="Logline" hint="One sentence that sells the film."><input {...bind('logline')} maxLength={300} /></Field>
-      <Field label="Synopsis" hint="A few sentences about the film."><textarea rows={4} {...bind('synopsis')} required /></Field>
+      <Field label="Synopsis" hint="A few sentences about the film."><textarea rows={4} {...bind('synopsis')} required={!draft} /></Field>
       <div className="two">
         <Field label="Country of production"><input {...bind('country')} maxLength={80} /></Field>
         <Field label="Language"><input {...bind('language')} maxLength={80} /></Field>
@@ -235,7 +236,7 @@ function EntryFields({ f, set }) {
       <FileBox label="Script (optional)" kind="script" accept=".pdf,.doc,.docx,.txt" f={f} set={set} />
       <FileBox label="Press kit or other documents (optional)" kind="presskit" accept=".pdf,.doc,.docx,.zip,image/*" multiple f={f} set={set} />
 
-      <label className="check"><input type="checkbox" {...tick('rights_confirmed')} required /> I confirm I hold the rights to submit this film, and that the information above is true.</label>
+      <label className="check"><input type="checkbox" {...tick('rights_confirmed')} required={!draft} /> I confirm I hold the rights to submit this film, and that the information above is true.</label>
     </>
   )
 }
@@ -253,6 +254,7 @@ export function FestivalSubmitPage({ slug }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [made, setMade] = useState(null)
+  const [films, setFilms] = useState([])
   useEffect(() => { loadSubmissionBoard().then(setBoard).catch(() => setBoard({ failed: true, entries: [], festivals: [], categories: [], tiers: [] })) }, [])
   const entry = board && board.entries.find((x) => x.festival.slug === slug)
   const fest = entry ? entry.festival : board && board.festivals.find((x) => x.slug === slug)
@@ -324,6 +326,11 @@ export function FestivalSubmitPage({ slug }) {
               {cats.map((c) => <option key={c.id} value={c.id}>{c.name} - {c.current ? money(c.current.fee_cents) + ' (' + deadlineText(c) + ')' : 'closed'}</option>)}
             </select>
           </Field>
+          {films.length > 0 ? (
+            <Field label="Choose your film" hint="Fills in the form from the film you saved. You can still change anything.">
+              <select value="" onChange={(e) => { const x = films.find((q) => q.id === e.target.value); if (x) setF({ ...EMPTY, ...filmToForm(x) }) }}><option value="">Choose a film</option>{films.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}</select>
+            </Field>
+          ) : <p className="note">Tip: add your film first on <a href="/filmmaker">My submissions</a>, then it fills in here for every festival.</p>}
           <EntryFields f={f} set={set} />
           <Field label="Waiver or discount code (optional)"><input value={code} onChange={(e) => setCode(e.target.value)} maxLength={40} autoComplete="off" /></Field>
           {quote && quote.ok && (
@@ -399,6 +406,46 @@ function MyEntry({ s, names, refresh, setMsg }) {
   )
 }
 
+function MyFilms({ setMsg }) {
+  const [films, setFilms] = useState(null)
+  const [edit, setEdit] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(() => { listMyFilms().then(setFilms).catch((e) => setMsg(e.message, true)) }, [setMsg])
+  useEffect(() => { load() }, [load])
+  const set = (k, v) => setEdit((p) => ({ ...p, [k]: v }))
+  const save = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    try { await saveMyFilm(edit.id, edit); setEdit(null); setMsg('Film saved. Now you can enter it into any festival.'); load() } catch (x) { setMsg(x.message, true) }
+    setBusy(false)
+  }
+  const del = async (x) => {
+    if (!window.confirm('Remove "' + x.title + '" from My films? Entries already sent to festivals are not affected.')) return
+    try { await deleteMyFilm(x.id); load() } catch (err) { setMsg(err.message, true) }
+  }
+  return (
+    <div className="panel">
+      <h2>Step 1: Your films</h2>
+      <p className="note">Add your film once, with its video, poster, credits and details. Then enter it into any festival without typing it again.</p>
+      {films && films.length === 0 && !edit && <p className="note">You have not added a film yet.</p>}
+      {films && films.map((x) => (
+        <p key={x.id}><strong>{x.title}</strong> <span className="note small">{(x.data && x.data.director) || ''}{x.data && x.data.runtime_min ? ' | ' + x.data.runtime_min + ' min' : ''} | {(x.files || []).length} files</span>{' '}
+          <button type="button" className="btn ghost small" onClick={() => setEdit({ ...EMPTY, ...filmToForm(x), id: x.id })}>Edit</button>{' '}
+          <a className="btn small" href="/submit">Enter a festival</a>{' '}
+          <button type="button" className="btn ghost danger small" onClick={() => del(x)}>Remove</button></p>
+      ))}
+      {!edit && <div className="actions"><button type="button" className="btn" onClick={() => setEdit({ ...EMPTY })}>Add a film</button></div>}
+      {edit && (
+        <form onSubmit={save}>
+          <h3>{edit.id ? 'Edit film' : 'New film'}</h3>
+          <EntryFields f={edit} set={set} draft />
+          <div className="actions"><button className="btn" type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save film'}</button><button className="btn ghost" type="button" onClick={() => setEdit(null)}>Cancel</button></div>
+        </form>
+      )}
+    </div>
+  )
+}
+
 export function FilmmakerPage({ search }) {
   useSeo({ title: 'My submissions', robots: 'noindex,nofollow' })
   const [session, refreshSession] = useAuth()
@@ -448,8 +495,9 @@ export function FilmmakerPage({ search }) {
       {session && (
         <>
           {msg && <p className={msg.isError ? 'error' : 'ok'} role="status">{msg.text}</p>}
+          <MyFilms setMsg={setMsg} />
           <div className="actions">
-            <a className="btn" href="/submit">Find festivals to enter</a>
+            <a className="btn" href="/submit">Step 2: Find festivals to enter</a>
             <button className="btn ghost" type="button" onClick={() => signOut()}>Sign out</button>
           </div>
           <form className="panel" onSubmit={saveMe}>

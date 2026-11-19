@@ -172,3 +172,35 @@ export async function payForSubmission(id, code) {
     return { ok: true, url: j.url }
   } catch { return { ok: false, message: 'Payments are not available right now.' } }
 }
+
+// ---------------------------------------------------------------- My films: add a film once, enter it anywhere
+const CORE = ['title', 'director', 'runtime_min', 'year', 'synopsis', 'screener_url', 'screener_password', 'poster_url', 'country', 'language', 'genre']
+const FILMS_KEY = 'festaview_demo_films'
+const demoFilms = () => { try { return JSON.parse(localStorage.getItem(FILMS_KEY)) || [] } catch { return [] } }
+const demoSaveFilms = (l) => { try { localStorage.setItem(FILMS_KEY, JSON.stringify(l)) } catch { /* ignore */ } }
+const filmData = (f) => ({ ...Object.fromEntries(CORE.map((k) => [k, f[k] == null ? '' : f[k]])), ...pickDetails(f) })
+
+export async function listMyFilms() {
+  if (!supabase) return demoFilms()
+  const r = await supabase.from('filmmaker_films').select('*').order('created_at', { ascending: false })
+  if (r.error) throw new Error(r.error.message)
+  return r.data || []
+}
+export async function saveMyFilm(id, f) {
+  if (!supabase) {
+    const l = demoFilms()
+    const row = { id: id || 'df' + Date.now(), title: f.title, data: filmData(f), files: f.files || [], created_at: new Date().toISOString() }
+    demoSaveFilms(id ? l.map((x) => (x.id === id ? row : x)) : [row, ...l])
+    return row.id
+  }
+  const r = await supabase.rpc('save_my_film', { p_id: id || null, p_data: filmData(f), p_files: f.files || [] })
+  if (r.error) throw new Error(r.error.message)
+  return r.data
+}
+export async function deleteMyFilm(id) {
+  if (!supabase) { demoSaveFilms(demoFilms().filter((x) => x.id !== id)); return }
+  const r = await supabase.rpc('delete_my_film', { p_id: id })
+  if (r.error) throw new Error(r.error.message)
+}
+// A saved film as the entry form's fields.
+export const filmToForm = (row) => ({ ...(row.data || {}), files: row.files || [] })
