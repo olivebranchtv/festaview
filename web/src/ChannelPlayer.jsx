@@ -38,7 +38,7 @@ export default function ChannelPlayer({ channelId, data, onClose }) {
 
   const flush = (film) => {
     const w = watched.current
-    if (film && w.secs >= 1) logView({ film_id: film.id, festival_id: film.festival_id, seconds_watched: Math.min(21600, Math.round(w.secs)) })
+    if (film && w.secs >= 1) logView({ film_id: film.id, festival_id: film.festival_id, seconds_watched: Math.min(21600, Math.round(w.secs)), source: 'channel' })
     w.secs = 0
   }
 

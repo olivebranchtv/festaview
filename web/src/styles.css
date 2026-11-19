@@ -346,3 +346,29 @@ button.live-card.playable:hover { transform: translateY(-3px); }
   .guide-row { flex-wrap: wrap; }
   .ch-next { flex-basis: 100%; text-align: left; max-width: none; }
 }
+
+/* ---------- network analytics ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 12px 0 16px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 2px; }
+.kpi span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.kpi strong { font-size: 28px; color: var(--text); line-height: 1.15; }
+.kpi small { color: var(--muted); font-size: 12px; }
+.chart svg { width: 100%; height: 150px; display: block; }
+.chart .bar { fill: var(--gold); opacity: .85; }
+.chart .bar:hover { opacity: 1; }
+.chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; gap: 8px; flex-wrap: wrap; }
+.two-col { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-top: 16px; }
+.two-col .panel { margin-top: 0; }
+.rank { list-style: none; margin: 0; padding: 0; }
+.rank li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center; }
+.rank li:first-child { border-top: 0; }
+.rank small { display: block; color: var(--muted); }
+.muted { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.srcbar { margin: 12px 0; }
+.srcbar-top { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; }
+.srcbar-track { height: 8px; background: #2a2a40; border-radius: 4px; overflow: hidden; }
+.srcbar-track i { display: block; height: 100%; background: var(--gold); }
+.issues { margin: 0; padding-left: 20px; color: #ffcf7a; }
+.issues li { margin: 6px 0; }
+.banner-warn { background: #2a2210; color: var(--gold); border-radius: 10px; padding: 12px 16px; }
+@media (max-width: 800px) { .two-col { grid-template-columns: minmax(0, 1fr); } }

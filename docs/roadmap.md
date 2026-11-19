@@ -49,3 +49,12 @@ on festival pages, ChannelPlayer (joins at the right offset, auto-advances). Fil
 from the HLS playlist or MP4 metadata (fallback: runtime_min). Migration: 006_channels.sql.
 Not built: the same channels on the Roku app (needs the schedule math ported to BrightScript); real live streams in
 the guide; adding or removing films shifts the schedule for everyone (cycle length changes).
+
+## Festaview-wide analytics (2026-11-19)
+Network console (#/network, network owner only) now has Analytics / Festivals / Inquiries tabs. Analytics: unique viewers,
+views, hours, modeled revenue and Festaview share (assumptions editable; real ad impressions used when present),
+hours-per-day chart, festival leaderboard, top films, viewing sources (website player vs automatic channels),
+"Needs attention" health list, CSV export. Backed by owner-only SQL functions (migration 007: network_totals,
+network_overview, network_films, network_daily, network_sources) and view_events.source.
+Not built: Roku viewing reports (the Roku app does not log views), real ad revenue import, uptime/error monitoring,
+unique-viewer de-duplication across devices.

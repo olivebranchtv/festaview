@@ -287,3 +287,54 @@ export async function saveLog(fid, log) {
   const r = await supabase.from('screening_logs').insert({ ...clean(log), festival_id: fid })
   if (r.error) throw r.error
 }
+
+// ---- network-wide analytics (network owner only) ----
+async function demoNetwork(days) {
+  const { loadData } = await import('./data.js')
+  const d = await loadData()
+  const k = days / 30
+  const overview = d.festivals.map((f, i) => ({ festival_id: f.id, views: Math.round((420 - i * 130) * k), seconds: Math.round((420 - i * 130) * k * 1900), impressions: 0, viewers: Math.round((260 - i * 80) * k) }))
+  const filmStats = d.films.slice(0, 6).map((m, i) => ({ film_id: m.id, festival_id: m.festival_id, views: Math.round((180 - i * 25) * k), seconds: Math.round((180 - i * 25) * k * 2100), impressions: 0 }))
+  const daily = []
+  for (let n = Math.min(days, 90) - 1; n >= 0; n--) {
+    const day = new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
+    const w = 55 + ((n * 37) % 50) + (n < 7 ? 30 : 0)
+    daily.push({ day, views: w, seconds: w * 1900, viewers: Math.round(w * 0.6) })
+  }
+  const views = overview.reduce((a, r) => a + r.views, 0)
+  const seconds = overview.reduce((a, r) => a + r.seconds, 0)
+  return {
+    festivals: d.festivals.map((f) => ({ ...f, status: 'published' })),
+    films: d.films.map((m) => ({ ...m, status: 'published' })),
+    feeds: d.feeds.map((l) => ({ ...l, stream_url: l.stream_url || 'https://example.com/live.m3u8' })),
+    admins: d.festivals.slice(0, 2).map((f) => ({ festival_id: f.id, user_id: 'demo' })),
+    overview, filmStats, daily, inquiries: 3, missingSql: false,
+    totals: { views, seconds, impressions: 0, viewers: Math.round(views * 0.62) },
+    sources: [{ source: 'web', views: Math.round(views * 0.7), seconds: Math.round(seconds * 0.6) }, { source: 'channel', views: Math.round(views * 0.3), seconds: Math.round(seconds * 0.4) }],
+  }
+}
+
+export async function networkData(days) {
+  if (isDemo) return demoNetwork(days)
+  const since = new Date(Date.now() - days * 864e5).toISOString()
+  const [fest, films, feeds, admins, tot, ov, fs, dy, src, inq] = await Promise.all([
+    supabase.from('festivals').select('*').order('created_at', { ascending: false }),
+    supabase.from('films').select('id,festival_id,title,status,video_url,duration_sec,runtime_min,created_at'),
+    supabase.from('live_feeds').select('id,festival_id,name,stream_url,is_live,is_replay_loop'),
+    supabase.from('festival_admins').select('festival_id,user_id'),
+    supabase.rpc('network_totals', { p_since: since }),
+    supabase.rpc('network_overview', { p_since: since }),
+    supabase.rpc('network_films', { p_since: since }),
+    supabase.rpc('network_daily', { p_since: since }),
+    supabase.rpc('network_sources', { p_since: since }),
+    supabase.from('inquiries').select('id').gte('created_at', since),
+  ])
+  if (fest.error) throw fest.error
+  return {
+    festivals: fest.data || [], films: films.data || [], feeds: feeds.data || [], admins: admins.data || [],
+    totals: (tot.data && tot.data[0]) || { views: 0, seconds: 0, impressions: 0, viewers: 0 },
+    overview: ov.data || [], filmStats: fs.data || [], daily: dy.data || [], sources: src.data || [],
+    inquiries: (inq.data || []).length,
+    missingSql: [tot, ov, fs, dy, src].some((r) => r.error),
+  }
+}

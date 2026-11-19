@@ -81,7 +81,14 @@ export function deviceId() {
 
 export async function logView(ev) {
   if (!supabase) return
-  try { await supabase.from('view_events').insert({ ...ev, device_id: deviceId() }) } catch { /* analytics must never break playback */ }
+  try {
+    const r = await supabase.from('view_events').insert({ ...ev, device_id: deviceId() })
+    // If the database does not have the newer "source" column yet, record the view without it.
+    if (r.error && ev.source) {
+      const { source, ...rest } = ev
+      await supabase.from('view_events').insert({ ...rest, device_id: deviceId() })
+    }
+  } catch { /* analytics must never break playback */ }
 }
 
 export async function castVote(film) {
