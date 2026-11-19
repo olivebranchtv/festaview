@@ -423,3 +423,10 @@ button.live-card.playable:hover { transform: translateY(-3px); }
 .chat-form input:first-child { grid-column: 1 / -1; }
 .error.small { font-size: 13px; margin: 6px 0 0; }
 @media (max-width: 900px) { .room-grid.with-chat { grid-template-columns: minmax(0, 1fr); } .chat { height: 420px; } .gate { padding: 28px 18px; } }
+
+/* floating admin messages */
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 200; max-width: min(640px, calc(100vw - 32px)); display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 14px 18px; border-radius: 12px; font-weight: 600; box-shadow: 0 12px 40px rgba(0, 0, 0, .55); animation: toast-in .2s ease-out; }
+.toast.good { background: #12301f; color: #8be8ad; border: 1px solid #1f5a39; }
+.toast.bad { background: #3a1517; color: #ffb4b7; border: 1px solid #7a2a2e; }
+.toast button { background: transparent; border: 1px solid currentColor; color: inherit; border-radius: 8px; padding: 4px 10px; cursor: pointer; font: inherit; font-weight: 500; opacity: .85; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }

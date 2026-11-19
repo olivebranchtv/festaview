@@ -281,6 +281,11 @@ export default function Network() {
   const [version, setVersion] = useState(0)
   const [assume, setAssume] = useState({ cpm: 12, adsPerHour: 4, fill: 70 })
   const note = useCallback((text, isError) => setMsg({ text, isError: !!isError }), [])
+  useEffect(() => {
+    if (!msg) return undefined
+    const t = setTimeout(() => setMsg(null), msg.isError ? 12000 : 5000)
+    return () => clearTimeout(t)
+  }, [msg])
   const reload = useCallback(() => setVersion((v) => v + 1), [])
 
   useEffect(() => { api.getSession().then(setSession); return api.onAuth(setSession) }, [])
@@ -312,7 +317,12 @@ export default function Network() {
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsg(null) }}>{label}</button>
         ))}
       </nav>
-      {msg && <p className={msg.isError ? 'error' : 'ok'}>{msg.text}</p>}
+      {msg && (
+        <div className={'toast ' + (msg.isError ? 'bad' : 'good')} role="status" aria-live="polite">
+          <span>{msg.text}</span>
+          <button type="button" onClick={() => setMsg(null)} aria-label="Dismiss">Close</button>
+        </div>
+      )}
       {!data && <p className="note pad">Loading...</p>}
       {data && tab === 'analytics' && <Analytics data={data} days={days} setDays={setDays} assume={assume} setAssume={setAssume} />}
       {data && tab === 'festivals' && <Manage data={data} reload={reload} note={note} />}

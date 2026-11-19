@@ -1127,6 +1127,12 @@ export default function Admin() {
   const [tab, setTab] = useState('films')
   const [msg, setMsgState] = useState(null)
   const setMsg = useCallback((text, isError) => setMsgState({ text, isError: !!isError }), [])
+  // Messages float on screen so they are seen wherever the page is scrolled, then fade out.
+  useEffect(() => {
+    if (!msg) return undefined
+    const t = setTimeout(() => setMsgState(null), msg.isError ? 12000 : 5000)
+    return () => clearTimeout(t)
+  }, [msg])
 
   useEffect(() => {
     api.getSession().then(setSession)
@@ -1150,7 +1156,12 @@ export default function Admin() {
           {!api.isDemo && <button className="btn ghost" onClick={() => api.signOut()}>Sign out</button>}
         </div>
       </div>
-      {msg && <p className={msg.isError ? 'error' : 'ok'}>{msg.text}</p>}
+      {msg && (
+        <div className={'toast ' + (msg.isError ? 'bad' : 'good')} role="status" aria-live="polite">
+          <span>{msg.text}</span>
+          <button type="button" onClick={() => setMsgState(null)} aria-label="Dismiss">Close</button>
+        </div>
+      )}
       {festivals && festivals.length === 0 && <p className="note">Your account is not linked to a festival yet. Ask Festaview to connect it.</p>}
       {current && (
         <>
