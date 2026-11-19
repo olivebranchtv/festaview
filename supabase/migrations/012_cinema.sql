@@ -96,15 +96,22 @@ alter table cinema_showings enable row level security;
 alter table cinema_tickets enable row level security;
 alter table cinema_chat enable row level security;
 
+drop policy if exists "owner reads and edits settings" on cinema_settings;
 create policy "owner reads and edits settings" on cinema_settings for all using (is_platform_admin()) with check (is_platform_admin());
+drop policy if exists "public read active screens" on cinema_screens;
 create policy "public read active screens" on cinema_screens for select using (active or is_platform_admin());
+drop policy if exists "owner manages screens" on cinema_screens;
 create policy "owner manages screens" on cinema_screens for all using (is_platform_admin()) with check (is_platform_admin());
 -- Showings are written only through the booking functions below, so the rules always apply.
+drop policy if exists "festival admins read their showings" on cinema_showings;
 create policy "festival admins read their showings" on cinema_showings for select using (is_festival_admin(festival_id) or is_platform_admin());
+drop policy if exists "festival admins read tickets" on cinema_tickets;
 create policy "festival admins read tickets" on cinema_tickets for select
   using (exists (select 1 from cinema_showings s where s.id = showing_id and (is_festival_admin(s.festival_id) or is_platform_admin())));
+drop policy if exists "public read visible chat" on cinema_chat;
 create policy "public read visible chat" on cinema_chat for select
   using (not hidden and exists (select 1 from cinema_showings s where s.id = showing_id and s.status = 'scheduled' and s.chat_enabled));
+drop policy if exists "festival admins moderate chat" on cinema_chat;
 create policy "festival admins moderate chat" on cinema_chat for all
   using (is_festival_admin(festival_id) or is_platform_admin()) with check (is_festival_admin(festival_id) or is_platform_admin());
 
