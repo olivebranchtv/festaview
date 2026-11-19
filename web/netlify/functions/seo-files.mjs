@@ -2,7 +2,9 @@
 import { loadCatalog, sitemapXml, llmsTxt } from '../lib/seo.mjs'
 
 export default async (req) => {
-  const which = new URL(req.url).searchParams.get('f')
+  // Netlify may show this function the original address (/llms.txt) or the rewritten one, so check both.
+  const u = new URL(req.url)
+  const which = u.searchParams.get('f') || (u.pathname.includes('llms') ? 'llms' : 'sitemap')
   const url = process.env.VITE_SUPABASE_URL
   const key = process.env.VITE_SUPABASE_ANON_KEY
   const data = await loadCatalog(fetch, url && key ? { url, key } : undefined)
