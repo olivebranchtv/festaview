@@ -204,7 +204,7 @@ function Hero({ go, stats, festivals }) {
         <h1>Every festival. Every screen.</h1>
         <p className="lede">
           Festaview brings the world's film festivals to your TV. Watch official selections, live premieres and award
-          winners from festivals around the globe, free, any time.
+          winners from festivals around the globe. Most films are free to watch.
         </p>
         <div className="actions">
           <RokuButton />
@@ -304,7 +304,7 @@ function Devices() {
           premiere, or pick up a short before dinner.
         </p>
         <ul className="ticks">
-          <li>Free and ad-supported, no subscription</li>
+          <li>Free and ad-supported, no subscription (some festivals add ticketed events)</li>
           <li>Live premieres, Q&amp;As and 24/7 replay channels</li>
           <li>Captions on films, so everyone can watch</li>
           <li>Festival-branded rows, so you always know whose selection you are watching</li>
@@ -355,9 +355,9 @@ function ForFestivals() {
 function Faq() {
   const q = [
     ['What is Festaview?', 'A streaming network for film festivals. Each festival gets its own channel and page, and viewers can browse them all in one place.'],
-    ['Does it cost anything to watch?', 'No. Festaview is free and supported by ads.'],
+    ['Does it cost anything to watch?', 'Most films and channels are free, supported by ads. Some festivals also sell passes or tickets for premieres and theater screenings. Those are shown on the festival\'s page.'],
     ['Where can I watch?', 'On Roku today, and on the web. More TV platforms are planned.'],
-    ['How do festivals earn money?', 'Festivals receive 80% of the ad revenue their content earns. Festivals can also add their own sponsors.'],
+    ['How do festivals earn money?', 'Festivals receive 80% of the ad revenue their content earns. Festivals can also link to their own pass and ticket sales.'],
     ['What about filmmakers?', 'Films appear only with the filmmaker\'s agreement. Festivals can share earnings with filmmakers and show them viewing data.'],
     ['How do I add my festival?', 'Get in touch with us using the button above and we will set up your channel and page.'],
   ]
