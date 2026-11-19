@@ -1,5 +1,5 @@
 import { pageSeo, injectSeo, sitemapXml, llmsTxt, loadCatalog } from './lib/seo.mjs'
-import { filmPath, eventPath, channelPath, festivalPath, cinemaPath } from '../src/paths.js'
+import { filmPath, eventPath, channelPath, festivalPath, cinemaPath, submitPath } from '../src/paths.js'
 
 let pass = 0, fail = 0
 const ok = (name, cond, extra = '') => { cond ? pass++ : fail++; console.log((cond ? 'PASS ' : 'FAIL ') + name + (cond ? '' : ' ' + extra)) }
@@ -8,7 +8,7 @@ const iso = (h) => new Date(Date.now() + h * 3600e3).toISOString()
 const data = {
   ok: true,
   festivals: [
-    { id: 'f1', slug: 'olive-branch', name: 'Olive Branch Film Festival', tagline: 'Faith, Family & Film', description: 'A festival of faith and family films.', location: 'Arizona', starts_on: '2027-03-12', ends_on: '2027-03-16', website: 'https://example.org', banner_url: 'https://img.example/banner.jpg', auto_channel: true, channel_order: 'listed', status: 'published' },
+    { id: 'f1', slug: 'olive-branch', name: 'Olive Branch Film Festival', tagline: 'Faith, Family & Film', description: 'A festival of faith and family films.', location: 'Arizona', starts_on: '2027-03-12', ends_on: '2027-03-16', website: 'https://example.org', banner_url: 'https://img.example/banner.jpg', auto_channel: true, channel_order: 'listed', status: 'published', submissions_open: true, submissions_opens_at: null, submissions_closes_at: iso(24 * 60), submission_notes: 'No <script> premieres please.' },
     { id: 'f2', slug: 'night-owl', name: 'Night Owl Horror Fest', tagline: 'After dark', status: 'published', auto_channel: false },
   ],
   films: [
@@ -27,6 +27,11 @@ const data = {
   cinema: [
     { id: 'c0a1b2c3-0000-4000-8000-000000000001', screen_name: 'Screen 1', screen_number: 1, festival_name: 'Olive Branch Film Festival', festival_slug: 'olive-branch', title: 'Sparrows Premiere Night', description: 'A shared premiere of The Sparrows Nesting with a short Q&A.', poster_url: 'https://img.example/p1.jpg', starts_at: iso(5), ends_at: iso(7), seats: 100, taken: 100, access: 'free' },
     { id: 'c0a1b2c3-0000-4000-8000-000000000002', screen_name: 'Screen 2', screen_number: 2, festival_name: null, festival_slug: null, title: 'Late Show <Live>', description: null, poster_url: null, starts_at: iso(30), ends_at: iso(32), seats: null, taken: 3, access: 'free' },
+  ],
+  submissionCategories: [{ id: 'sc1', festival_id: 'f1', name: 'Short <Film>', description: 'Up to 40 minutes', active: true, sort_order: 1 }],
+  submissionTiers: [
+    { id: 't1', category_id: 'sc1', festival_id: 'f1', name: 'Early', deadline: iso(24 * 10), fee_cents: 2500, sort_order: 1 },
+    { id: 't2', category_id: 'sc1', festival_id: 'f1', name: 'Regular', deadline: null, fee_cents: 3500, sort_order: 2 },
   ],
 }
 const base = '<!doctype html><html lang="en"><head><title>Festaview</title><meta name="description" content="old"><meta property="og:title" content="old"><link rel="canonical" href="https://old.example/"></head><body><div id="root"></div></body></html>'

@@ -1,10 +1,11 @@
 // Server-side SEO for every Festaview page: title, description, canonical, Open Graph / Twitter tags, JSON-LD structured
 // data, and real crawlable HTML content. Used by the edge function (so Google, Bing and AI crawlers receive complete HTML
 // without running JavaScript), the sitemap and llms.txt. Pure functions: no network access except loadCatalog().
-import { SITE_NAME, SITE_URL, slugify, festivalPath, filmPath, eventPath, channelPath, liveFeedPath, cinemaPath, matchRoute, STATIC_PAGES } from '../../src/paths.js'
+import { SITE_NAME, SITE_URL, slugify, festivalPath, filmPath, eventPath, channelPath, liveFeedPath, cinemaPath, submitPath, matchRoute, STATIC_PAGES } from '../../src/paths.js'
 import { FAQ, BENEFITS, SITE_DESCRIPTION, SITE_TAGLINE } from '../../src/siteContent.js'
 import { buildChannels } from '../../src/channels.js'
 import { eventState } from '../../src/virtual.js'
+import { festivalCategories, submissionState, money as feeMoney, fmtDate } from '../../src/submissionRules.js'
 
 export const DEFAULT_IMAGE = SITE_URL + '/og-default.png'
 const LOGO = SITE_URL + '/logo-512.png'
@@ -31,7 +32,7 @@ export async function loadCatalog(fetchFn = fetch, { url = PUBLIC_URL, key = PUB
       return await r.json()
     } catch { return null }
   }
-  const [festivals, films, events, feeds, venues, products, screenings, cinema] = await Promise.all([
+  const [festivals, films, events, feeds, venues, products, screenings, cinema, subCats, subTiers] = await Promise.all([
     q('festivals?select=*&status=eq.published&order=sort_order,name'),
     q('films_public?select=*&order=created_at.desc'),
     q('virtual_events?select=*&status=eq.published'),
@@ -40,13 +41,16 @@ export async function loadCatalog(fetchFn = fetch, { url = PUBLIC_URL, key = PUB
     q('products?select=*&active=eq.true'),
     q('screenings?select=*'),
     q('cinema_board?select=*&order=starts_at'),
+    // Submissions are optional: if their tables are missing, every other page still works.
+    q('submission_categories?select=*&active=eq.true'),
+    q('submission_tiers?select=*'),
   ])
   if (festivals === null) failed = true
   let filmList = films
   if (filmList === null) filmList = await q('films?select=*&status=eq.published&order=created_at.desc')
   return {
     ok: !failed,
-    festivals: festivals || [], films: filmList || [], events: events || [], feeds: feeds || [], venues: venues || [], products: products || [], screenings: screenings || [], cinema: cinema || [],
+    festivals: festivals || [], films: filmList || [], events: events || [], feeds: feeds || [], venues: venues || [], products: products || [], screenings: screenings || [], cinema: cinema || [], submissionCategories: subCats || [], submissionTiers: subTiers || [],
   }
 }
 
@@ -311,6 +315,33 @@ export function pageSeo(pathname, data, origin) {
         '<h2>Questions</h2>' + FAQ.map(([q, a]) => '<h3>' + esc(q) + '</h3><p>' + esc(a) + '</p>').join(''))
       return seo
     }
+    case 'submitIndex': {
+      seo.title = 'Submit Your Film to Festivals'
+      seo.description = 'Create one filmmaker account, find film festivals accepting submissions, enter your short or feature, and pay the entry fee by card on ' + SITE_NAME + '.'
+      const open = data.festivals.map((f) => ({ f, cats: festivalCategories(data.submissionCategories, data.submissionTiers, f.id) })).filter((x) => submissionState(x.f) === 'open' && x.cats.length)
+      const items = [['/', 'Home'], [null, 'Submit your film']]
+      seo.jsonld.push(breadcrumbLd(items))
+      seo.body = shell(crumbs(items) + '<h1>Submit your film</h1><p>One ' + esc(SITE_NAME) + ' account lets you enter any festival on the platform, pay entry fees by card and track every submission.</p>' +
+        (open.length ? '<h2>Festivals accepting submissions</h2>' + list(open.map((x) => link(submitPath(x.f), x.f.name) + (x.f.submissions_closes_at ? ' - final deadline ' + esc(fmtDate(x.f.submissions_closes_at)) : ''))) : '<p>No festival is accepting submissions right now. Check back soon.</p>'))
+      return seo
+    }
+    case 'festivalSubmit': {
+      const f = data.festivals.find((x) => x.slug === route.slug)
+      if (!f) return data.ok ? notFound(seo) : seo
+      const cats = festivalCategories(data.submissionCategories, data.submissionTiers, f.id)
+      const state = submissionState(f)
+      seo.canonical = abs(submitPath(f))
+      seo.title = 'Submit to ' + f.name
+      seo.description = clip('Submit your film to ' + f.name + '. ' + (cats.length ? 'Categories: ' + cats.map((c) => c.name).join(', ') + '. ' : '') + 'See fees and deadlines, then enter and pay online.', 158)
+      if (state !== 'open') seo.robots = 'noindex,follow'
+      const items = [['/', 'Home'], ['/submit', 'Submit your film'], [festivalPath(f), f.name], [null, 'Submit']]
+      seo.jsonld.push(breadcrumbLd(items))
+      seo.body = shell(crumbs(items) + '<h1>Submit to ' + esc(f.name) + '</h1>' + (f.submission_notes ? '<p>' + esc(f.submission_notes) + '</p>' : '') +
+        (state === 'open' ? '' : '<p>This festival is not accepting submissions right now.</p>') +
+        cats.map((c) => '<h2>' + esc(c.name) + '</h2>' + (c.description ? '<p>' + esc(c.description) + '</p>' : '') + list(c.tiers.map((t) => esc(t.name) + ': ' + esc(feeMoney(t.fee_cents)) + (t.deadline ? ' until ' + esc(fmtDate(t.deadline)) : '')))).join('') +
+        (f.submissions_closes_at ? '<p>Final deadline ' + esc(fmtDate(f.submissions_closes_at)) + '.</p>' : ''))
+      return seo
+    }
     case 'about': {
       seo.title = 'About Festaview'
       seo.description = SITE_DESCRIPTION
@@ -319,7 +350,7 @@ export function pageSeo(pathname, data, origin) {
       seo.body = shell(crumbs(items) + '<h1>About ' + esc(SITE_NAME) + '</h1><p>' + esc(SITE_DESCRIPTION) + '</p>' + list(['Watch official selections from film festivals, on demand.', 'Join live premieres, virtual screenings and Q&amp;As.', 'Tune in to festival channels that play on a schedule.', 'Watch on Roku or any web browser.']))
       return seo
     }
-    default: // admin, network, access, theater: private, never indexed
+    default: // admin, network, access, theater, filmmaker: private, never indexed
       seo.title = 'Festaview'
       seo.robots = 'noindex,nofollow'
       seo.canonical = SITE_URL + '/'
@@ -364,6 +395,7 @@ export function sitemapXml(data) {
   const urls = [
     ...STATIC_PAGES.map(([p]) => abs(p === '/' ? '/' : p)),
     ...data.festivals.map((f) => abs(festivalPath(f))),
+    ...data.festivals.filter((f) => submissionState(f) === 'open' && festivalCategories(data.submissionCategories, data.submissionTiers, f.id).length).map((f) => abs(submitPath(f))),
     ...data.films.map((m) => abs(filmPath(m))),
     ...(data.events || []).filter((e) => !eventState(e).ended).map((e) => abs(eventPath(e))),
     ...(data.cinema || []).map((s) => abs(cinemaPath(s))),

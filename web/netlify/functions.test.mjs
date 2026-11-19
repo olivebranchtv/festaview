@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
-import { verifyStripeSignature, makeCode, feeCents, checkoutParams, ticketCheckoutParams } from './lib/pay.mjs'
+import { currentTier, submissionState, csvText, money as feeMoney } from '../src/submissionRules.js'
+import { verifyStripeSignature, makeCode, feeCents, checkoutParams, ticketCheckoutParams, submissionCheckoutParams } from './lib/pay.mjs'
 import checkout from './functions/checkout.mjs'
 import webhook from './functions/stripe-webhook.mjs'
 import vstart from './functions/virtual-start.mjs'
@@ -188,6 +189,94 @@ ok('buyer who lost the last seat is refunded in full', r.status === 200 && db.ci
 r = await claim(new Request('https://site.example/x?session_id=cs_ticket_first1234'))
 const cj = await r.json()
 ok('claim returns the ticket code and showing', cj.status === 'ready' && cj.ticketCode === 'FV-TEST-0000-0001' && cj.showingId === SH)
+
+// --- filmmaker submissions (entry fees)
+const SUB = 'a1a1a1a1-aaaa-4aaa-8aaa-a1a1a1a1a1a1', SUBFREE = 'b2b2b2b2-bbbb-4bbb-8bbb-b2b2b2b2b2b2', SUBGONE = 'c3c3c3c3-cccc-4ccc-8ccc-c3c3c3c3c3c3'
+const festPct = db.festivals[0].ticket_fee_pct
+db.submissions = [
+  { id: SUB, festival_id: 'f1', status: 'submitted', payment_status: 'unpaid', title: 'My Short' },
+  { id: SUBFREE, festival_id: 'f1', status: 'submitted', payment_status: 'unpaid', title: 'Waived Film' },
+  { id: SUBGONE, festival_id: 'f1', status: 'withdrawn', payment_status: 'unpaid', title: 'Gone' },
+]
+const requotes = []
+const entryRefunds = []
+const prevFetch2 = globalThis.fetch
+globalThis.fetch = async (url, opts = {}) => {
+  const u = new URL(String(url))
+  if (u.pathname.endsWith('/rpc/submission_requote')) {
+    const a = JSON.parse(opts.body)
+    requotes.push(a)
+    const row = db.submissions.find((x) => x.id === a.p_id)
+    if (!row || row.status === 'withdrawn') return new Response(JSON.stringify({ status: 'unavailable' }), { status: 200 })
+    if (row.payment_status !== 'unpaid') return new Response(JSON.stringify({ status: 'paid' }), { status: 200 })
+    if (a.p_code === 'FREEPASS') { row.payment_status = 'waived'; return new Response(JSON.stringify({ status: 'completed' }), { status: 200 }) }
+    // the database decides the fee: 3500 cents (the regular tier), or half with a 50 percent code
+    return new Response(JSON.stringify({ status: 'ok', amount_cents: a.p_code === 'HALF' ? 1750 : 3500, festival_id: 'f1', title: row.title, category: 'Short', festival_name: 'Fest' }), { status: 200 })
+  }
+  if (u.pathname.endsWith('/rpc/submission_mark_paid')) {
+    const a = JSON.parse(opts.body)
+    if (db.submissions.some((x) => x.stripe_session_id === a.p_session)) return new Response(JSON.stringify({ status: 'ok' }), { status: 200 })
+    const row = db.submissions.find((x) => x.id === a.p_id)
+    if (!row || row.status === 'withdrawn') return new Response(JSON.stringify({ status: 'unavailable' }), { status: 200 })
+    if (row.payment_status !== 'unpaid') return new Response(JSON.stringify({ status: 'already_paid' }), { status: 200 })
+    Object.assign(row, { payment_status: 'paid', stripe_session_id: a.p_session, amount_paid_cents: a.p_amount, fee_cents: a.p_fee })
+    return new Response(JSON.stringify({ status: 'ok' }), { status: 200 })
+  }
+  if (u.host === 'api.stripe.com' && u.pathname.endsWith('/refunds')) { entryRefunds.push(String(opts.body)); return new Response('{}', { status: 200 }) }
+  return prevFetch2(url, opts)
+}
+const sp = submissionCheckoutParams({ submission: SUB, quote: { amount_cents: 3500, title: 'My Short', category: 'Short' }, festival: { id: 'f1', name: 'Fest', slug: 'fest' }, siteUrl: 'https://site.example' })
+ok('entry checkout uses the quoted amount and names the entry', sp.get('line_items[0][price_data][unit_amount]') === '3500' && sp.get('metadata[submission_id]') === SUB && sp.get('line_items[0][price_data][product_data][name]').includes('My Short'))
+ok('entry checkout returns to the filmmaker area', sp.get('success_url') === 'https://site.example/filmmaker?session_id={CHECKOUT_SESSION_ID}')
+r = await post(checkout, { submissionId: SUB })
+ok('entry checkout returns a stripe url', r.status === 200 && (await r.json()).url.includes('stripe'))
+r = await post(checkout, { submissionId: SUB, amount_cents: 1, price_cents: 1 })
+ok('browser cannot send an entry price', r.status === 200 && requotes.every((x) => Object.keys(x).sort().join() === 'p_code,p_id'))
+r = await post(checkout, { submissionId: SUB, code: 'HALF' })
+ok('waiver code is checked by the database, not the browser', r.status === 200 && requotes.at(-1).p_code === 'HALF')
+r = await post(checkout, { submissionId: SUBFREE, code: 'FREEPASS' })
+ok('a 100 percent waiver completes the entry without a payment', r.status === 200 && (await r.json()).done === true && db.submissions[1].payment_status === 'waived')
+r = await post(checkout, { submissionId: SUBGONE })
+ok('withdrawn entry cannot be paid', r.status === 404)
+r = await post(checkout, { submissionId: 'nope' })
+ok('bad entry id rejected', r.status === 400)
+r = await post(checkout, { submissionId: SUB, code: 'x'.repeat(41) })
+ok('overlong code rejected', r.status === 400)
+db.festivals[0].payments_enabled = false
+r = await post(checkout, { submissionId: SUB })
+ok('entry fees need payments turned on for the festival', r.status === 403)
+db.festivals[0].payments_enabled = true
+const eev = (id, pi, sub = SUB) => JSON.stringify({ type: 'checkout.session.completed', data: { object: { id, payment_intent: pi, payment_status: 'paid', amount_total: 3500, customer_details: { email: 'f@x.com' }, metadata: { submission_id: sub, festival_id: 'f1' } } } })
+let e1 = eev('cs_entry_first12345', 'pi_e1')
+r = await post(webhook, e1, { 'stripe-signature': sign(e1) })
+ok('paid entry is recorded with the festival platform fee', r.status === 200 && db.submissions[0].payment_status === 'paid' && db.submissions[0].fee_cents === feeCents(3500, festPct) && db.submissions[0].amount_paid_cents === 3500)
+r = await post(webhook, e1, { 'stripe-signature': sign(e1) })
+ok('replayed entry payment is harmless and not refunded', r.status === 200 && entryRefunds.length === 0 && db.submissions[0].payment_status === 'paid')
+let e2 = eev('cs_entry_second1234', 'pi_e2')
+r = await post(webhook, e2, { 'stripe-signature': sign(e2) })
+ok('a second payment for an already paid entry is refunded', r.status === 200 && entryRefunds.length === 1 && entryRefunds[0].includes('pi_e2'))
+let e3 = eev('cs_entry_third12345', 'pi_e3', SUBGONE)
+r = await post(webhook, e3, { 'stripe-signature': sign(e3) })
+ok('payment for a withdrawn entry is refunded', r.status === 200 && entryRefunds.length === 2 && entryRefunds[1].includes('pi_e3'))
+ok('unsigned entry payment rejected', (await post(webhook, e1, { 'stripe-signature': 'bad' })).status === 400)
+r = await claim(new Request('https://site.example/x?session_id=cs_entry_first12345'))
+const cj2 = await r.json()
+ok('claim returns the paid entry', cj2.status === 'ready' && cj2.submissionId === SUB)
+
+// --- fee tier rules and CSV export
+const dayMs = 864e5, nowMs = Date.now()
+const tiers = [
+  { id: 'late', deadline: new Date(nowMs + 40 * dayMs).toISOString(), fee_cents: 5000, sort_order: 3 },
+  { id: 'early', deadline: new Date(nowMs + 5 * dayMs).toISOString(), fee_cents: 2500, sort_order: 1 },
+  { id: 'regular', deadline: new Date(nowMs + 20 * dayMs).toISOString(), fee_cents: 3500, sort_order: 2 },
+]
+ok('the earliest open deadline sets the fee', currentTier(tiers, nowMs).id === 'early')
+ok('after the early deadline the regular fee applies', currentTier(tiers, nowMs + 6 * dayMs).id === 'regular')
+ok('no fee applies after the last deadline', currentTier(tiers, nowMs + 50 * dayMs) === null)
+ok('a step without a deadline is the last step', currentTier([{ id: 'open', deadline: null, fee_cents: 100, sort_order: 2 }, { id: 'e', deadline: new Date(nowMs + dayMs).toISOString(), fee_cents: 50, sort_order: 1 }], nowMs + 2 * dayMs).id === 'open')
+ok('submissions follow the festival switch and dates', submissionState({ submissions_open: true }, nowMs) === 'open' && submissionState({ submissions_open: false }, nowMs) === 'closed' && submissionState({ submissions_open: true, submissions_opens_at: new Date(nowMs + dayMs).toISOString() }, nowMs) === 'not_open' && submissionState({ submissions_open: true, submissions_closes_at: new Date(nowMs - dayMs).toISOString() }, nowMs) === 'closed')
+ok('money text', feeMoney(0) === 'Free' && feeMoney(3500) === '$35' && feeMoney(2550) === '$25.50')
+ok('csv quotes values and defuses spreadsheet formulas', csvText([['a"b', '=HYPERLINK("x")', '+1', 'ok']]) === '"a""b","\'=HYPERLINK(""x"")","\'+1","ok"')
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed')
 process.exit(fail ? 1 : 0)

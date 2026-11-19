@@ -1,13 +1,14 @@
 // POST /.netlify/functions/checkout  { productId }  ->  { url }  (Stripe Checkout page)
-import { env, json, sb, checkoutParams, ticketCheckoutParams } from '../lib/pay.mjs'
+import { env, json, sb, checkoutParams, ticketCheckoutParams, submissionCheckoutParams } from '../lib/pay.mjs'
 
 export default async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
   const e = env()
   if (!e.stripeKey || !e.serviceKey || !e.supabaseUrl) return json({ error: 'Payments are not set up yet.' }, 503)
 
-  let productId, showingId
-  try { const b = await req.json(); productId = b.productId; showingId = b.showingId } catch { return json({ error: 'Bad request' }, 400) }
+  let productId, showingId, submissionId, code
+  try { const b = await req.json(); productId = b.productId; showingId = b.showingId; submissionId = b.submissionId; code = b.code } catch { return json({ error: 'Bad request' }, 400) }
+  if (submissionId) return submissionCheckout(submissionId, code, e, req)
   if (showingId) return ticketCheckout(showingId, e, req)
   if (!productId || !/^[0-9a-f-]{36}$/i.test(productId)) return json({ error: 'Bad request' }, 400)
 
@@ -51,6 +52,31 @@ async function ticketCheckout(showingId, e, req) {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + e.stripeKey, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: ticketCheckoutParams({ showing, festival, siteUrl }).toString(),
+  })
+  const session = await res.json().catch(() => ({}))
+  if (!res.ok || !session.url) return json({ error: 'Could not start the payment. Please try again.' }, 502)
+  return json({ url: session.url })
+}
+
+// A festival entry fee for a filmmaker's submission. The fee tier and any waiver code are worked out by the database.
+async function submissionCheckout(submissionId, code, e, req) {
+  if (!/^[0-9a-f-]{36}$/i.test(submissionId) || String(code || '').length > 40) return json({ error: 'Bad request' }, 400)
+  const rq = await sb('rpc/submission_requote', { method: 'POST', body: { p_id: submissionId, p_code: String(code || '') } })
+  const q = rq.ok && rq.data
+  if (!q) return json({ error: 'Could not start the payment. Please try again.' }, 502)
+  if (q.status === 'unavailable') return json({ error: 'That entry is not available.' }, 404)
+  if (q.status === 'paid') return json({ done: true })
+  if (q.status === 'closed') return json({ error: 'This festival is no longer accepting submissions.' }, 400)
+  if (q.status === 'completed') return json({ done: true })
+  if (q.status !== 'ok' || !(q.amount_cents >= 50)) return json({ error: 'Could not start the payment. Please try again.' }, 502)
+  const fr = await sb('festivals?id=eq.' + q.festival_id + '&select=id,slug,name,status,payments_enabled')
+  const festival = fr.ok && fr.data && fr.data[0]
+  if (!festival || festival.status !== 'published' || !festival.payments_enabled) return json({ error: 'Card payments are not available for this festival.' }, 403)
+  const siteUrl = e.siteUrl || new URL(req.url).origin
+  const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + e.stripeKey, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: submissionCheckoutParams({ submission: submissionId, quote: q, festival, siteUrl }).toString(),
   })
   const session = await res.json().catch(() => ({}))
   if (!res.ok || !session.url) return json({ error: 'Could not start the payment. Please try again.' }, 502)

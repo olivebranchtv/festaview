@@ -534,3 +534,73 @@ export async function approveShowing(id, okFlag) {
   const r = await supabase.rpc('approve_showing', { p_id: id, p_ok: okFlag })
   if (r.error) throw r.error
 }
+
+// ---- filmmaker submissions (festival side) ----
+const needDb = () => { if (isDemo) throw new Error('Submissions need a connected database.') }
+export async function submissionAdminData(fid) {
+  if (isDemo) return { categories: [], tiers: [], waivers: [], submissions: [] }
+  const [c, t, w, s] = await Promise.all([
+    supabase.from('submission_categories').select('*').eq('festival_id', fid).order('sort_order'),
+    supabase.from('submission_tiers').select('*').eq('festival_id', fid).order('sort_order'),
+    supabase.from('submission_waivers').select('*').eq('festival_id', fid).order('created_at'),
+    supabase.from('submissions').select('*').eq('festival_id', fid).in('payment_status', ['paid', 'free', 'waived', 'refunded']).order('created_at', { ascending: false }).limit(2000),
+  ])
+  const err = c.error || t.error || w.error || s.error
+  if (err) throw err
+  return { categories: c.data || [], tiers: t.data || [], waivers: w.data || [], submissions: s.data || [] }
+}
+export async function saveSubmissionSettings(fid, s) {
+  needDb()
+  const r = await supabase.rpc('save_submission_settings', { p_festival: fid, p_open: !!s.open, p_opens_at: s.opens_at || null, p_closes_at: s.closes_at || null, p_notes: s.notes || null })
+  if (r.error) throw r.error
+}
+export async function saveSubmissionCategory(fid, c) {
+  needDb()
+  const r = await supabase.rpc('save_submission_category', {
+    p_festival: fid, p_id: c.id || null, p_name: c.name, p_description: c.description || null, p_max_runtime: c.max_runtime_min || null, p_active: c.active !== false, p_tiers: c.tiers,
+  })
+  if (r.error) throw r.error
+  return r.data
+}
+export async function deleteSubmissionCategory(id) {
+  needDb()
+  const r = await supabase.rpc('delete_submission_category', { p_id: id })
+  if (r.error) throw r.error
+  return r.data
+}
+export async function saveSubmissionWaiver(fid, w) {
+  needDb()
+  const r = await supabase.rpc('save_submission_waiver', { p_festival: fid, p_id: w.id || null, p_code: w.code, p_percent: w.percent_off, p_max_uses: w.max_uses || null, p_expires: w.expires_at || null, p_active: w.active !== false, p_note: w.note || null })
+  if (r.error) throw r.error
+}
+export async function deleteSubmissionWaiver(id) {
+  needDb()
+  const r = await supabase.rpc('delete_submission_waiver', { p_id: id })
+  if (r.error) throw r.error
+}
+export async function setSubmissionStatus(id, status, note) {
+  needDb()
+  const r = await supabase.rpc('set_submission_status', { p_id: id, p_status: status, p_note: note || null })
+  if (r.error) throw r.error
+}
+export async function addSubmissionToFilms(id) {
+  needDb()
+  const r = await supabase.rpc('add_submission_to_films', { p_id: id })
+  if (r.error) throw r.error
+  return r.data
+}
+
+// ---- box office cut (owner only): per-title ticket rates
+export async function ticketRatesData() {
+  const [pr, sh] = await Promise.all([
+    supabase.from('products').select('id,festival_id,name,price_cents,fee_pct,active,event_id,film_id').gt('price_cents', 0).order('created_at', { ascending: false }),
+    supabase.from('cinema_showings').select('id,festival_id,title,price_cents,fee_pct,starts_at,status').gt('price_cents', 0).neq('status', 'cancelled').order('starts_at', { ascending: false }).limit(200),
+  ])
+  const err = pr.error || sh.error
+  if (err) throw err
+  return { products: pr.data || [], showings: sh.data || [] }
+}
+export async function setTicketRate(kind, id, pct) {
+  const r = await supabase.rpc('set_ticket_rate', { p_kind: kind, p_id: id, p_pct: pct })
+  if (r.error) throw r.error
+}

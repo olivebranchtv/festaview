@@ -8,6 +8,8 @@ export default async (req) => {
   const sid = new URL(req.url).searchParams.get('session_id') || ''
   if (!/^cs_[A-Za-z0-9_]{10,200}$/.test(sid)) return json({ status: 'error' }, 400)
 
+  const sub = await sb('submissions?stripe_session_id=eq.' + sid + '&select=id')
+  if (sub.ok && sub.data && sub.data[0]) return json({ status: 'ready', submissionId: sub.data[0].id })
   const tk = await sb('cinema_tickets?stripe_session_id=eq.' + sid + '&select=code,showing_id')
   if (tk.ok && tk.data && tk.data[0]) return json({ status: 'ready', ticketCode: tk.data[0].code, showingId: tk.data[0].showing_id })
   const r = await sb('entitlements?stripe_session_id=eq.' + sid + '&status=eq.active&select=code,festival_id,event_id')

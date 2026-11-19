@@ -88,3 +88,18 @@ export function checkoutParams({ product, festival, siteUrl }) {
   p.set('metadata[festival_id]', festival.id)
   return p
 }
+
+// A festival entry fee. The amount comes from the database (submission_requote), never from the browser.
+export function submissionCheckoutParams({ submission, quote, festival, siteUrl }) {
+  const p = new URLSearchParams()
+  p.set('mode', 'payment')
+  p.set('line_items[0][quantity]', '1')
+  p.set('line_items[0][price_data][currency]', 'usd')
+  p.set('line_items[0][price_data][unit_amount]', String(quote.amount_cents))
+  p.set('line_items[0][price_data][product_data][name]', 'Entry fee: ' + quote.title + (quote.category ? ' (' + quote.category + ')' : '') + ' - ' + festival.name)
+  p.set('success_url', siteUrl + '/filmmaker?session_id={CHECKOUT_SESSION_ID}')
+  p.set('cancel_url', siteUrl + '/filmmaker')
+  p.set('metadata[submission_id]', submission)
+  p.set('metadata[festival_id]', festival.id)
+  return p
+}

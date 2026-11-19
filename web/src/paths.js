@@ -16,6 +16,7 @@ export const filmPath = (m) => '/film/' + m.id + '/' + (slugify(m.title) || 'fil
 export const eventPath = (e) => '/virtual/' + e.id + '/' + (slugify(e.title) || 'event')
 export const channelPath = (c) => '/channel/' + c.slug
 export const liveFeedPath = (l) => '/live/' + l.id + '/' + (slugify(l.name) || 'channel')
+export const submitPath = (f) => '/festival/' + f.slug + '/submit'
 export const cinemaPath = (s) => '/cinema/' + s.id + '/' + (slugify(s.title) || 'showing')
 
 // Public pages that are listed in menus and the sitemap.
@@ -25,6 +26,7 @@ export const STATIC_PAGES = [
   ['/films', 'Films'],
   ['/cinema', 'Virtual theater'],
   ['/virtual', 'Virtual cinema'],
+  ['/submit', 'Submit your film'],
   ['/tv-guide', 'TV guide'],
   ['/live', 'Live channels'],
   ['/watch', 'Watch on Roku and web'],
@@ -40,7 +42,10 @@ export function matchRoute(pathname) {
   const [a, b, c] = seg
   switch (a) {
     case 'festivals': return seg.length === 1 ? { name: 'festivals' } : null
-    case 'festival': return seg.length === 2 ? { name: 'festival', slug: b } : null
+    case 'festival':
+      if (seg.length === 2) return { name: 'festival', slug: b }
+      return seg.length === 3 && c === 'submit' ? { name: 'festivalSubmit', slug: b } : null
+    case 'submit': return seg.length === 1 ? { name: 'submitIndex' } : null
     case 'films': return seg.length === 1 ? { name: 'films' } : null
     case 'film': return seg.length === 2 || seg.length === 3 ? { name: 'film', id: b, slug: c } : null
     case 'virtual':
@@ -57,7 +62,7 @@ export function matchRoute(pathname) {
     case 'watch': return seg.length === 1 ? { name: 'watch' } : null
     case 'for-festivals': return seg.length === 1 ? { name: 'forFestivals' } : null
     case 'about': return seg.length === 1 ? { name: 'about' } : null
-    case 'admin': case 'network': case 'access': return { name: a, private: true }
+    case 'admin': case 'network': case 'access': case 'filmmaker': return { name: a, private: true }
     case 'theater': return { name: 'theater', slug: b, private: true }
     default: return null
   }

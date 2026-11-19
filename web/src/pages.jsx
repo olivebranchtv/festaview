@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { submitInquiry, unlockStream, storedCode, storeCode, startCheckout, claimAccess } from './data.js'
 import { buildChannels, schedule } from './channels.js'
 import { eventState, fmtWhen } from './virtual.js'
-import { festivalPath, filmPath, liveFeedPath, slugify } from './paths.js'
+import { festivalPath, filmPath, liveFeedPath, slugify, submitPath } from './paths.js'
+import { submissionState } from './submissionRules.js'
 import { FAQ, BENEFITS, SITE_DESCRIPTION } from './siteContent.js'
 import { useSeo } from './seo.js'
 import { CONTACT_EMAIL } from './config.js'
@@ -652,6 +653,7 @@ export function FestivalPage({ data, slug }) {
           <div className="actions">
             {featured && featured.video_url && <a className="btn" href={filmPath(featured)}>Watch now</a>}
             {featured && !featured.video_url && <button className="btn" onClick={() => to('selection')}>See the films</button>}
+            {submissionState(fest) === 'open' && <a className="btn ghost" href={submitPath(fest)}>Submit your film</a>}
             {fest.passes_url && <a className="btn ghost" href={fest.passes_url} target="_blank" rel="noreferrer">Get passes</a>}
             <RokuButton className="ghost" />
           </div>

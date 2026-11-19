@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import { cinemaJoin, cinemaListChat, cinemaPostChat, logView } from './data.js'
 import { ChatPanel } from './VirtualRoom.jsx'
+import { loadCast, watchCast, requestCast, endCast, castLoad, castPosition, castSeek } from './cast.js'
 
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 const mmss = (sec) => { const s = Math.max(0, Math.round(sec)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') }
@@ -33,6 +34,21 @@ export default function CinemaRoom({ showing, onLeave }) {
   const stageRef = useRef(null)
   const hlsRef = useRef(null)
   const viewRef = useRef(null)
+  const [cast, setCast] = useState({ available: false, on: false, name: '' })
+  const castOnRef = useRef(false)
+  castOnRef.current = cast.on
+  const airplay = typeof window !== 'undefined' && !!window.WebKitPlaybackTargetAvailabilityEvent
+
+  // Chromecast: load the Cast sender once and follow the session.
+  useEffect(() => {
+    let off = null, stop = false
+    loadCast().then((ok) => {
+      if (stop || !ok) return
+      setCast((c) => ({ ...c, available: true }))
+      try { off = watchCast((st) => setCast((c) => ({ ...c, on: st.on, name: st.name }))) } catch { /* ignore */ }
+    })
+    return () => { stop = true; if (off) off() }
+  }, [])
 
   useEffect(() => {
     let stop = false
@@ -82,6 +98,7 @@ export default function CinemaRoom({ showing, onLeave }) {
     if (!ok || !view) return undefined
     const v = videoRef.current
     if (!v) return undefined
+    if (castOnRef.current) { v.pause(); return undefined }
     let watched = { secs: 0, last: 0 }
     let item = null
     let onTime = null
@@ -105,7 +122,34 @@ export default function CinemaRoom({ showing, onLeave }) {
         logView({ ...(item.film ? { film_id: item.film.id } : {}), festival_id: info.festival_id, seconds_watched: Math.min(21600, Math.round(watched.secs)), source: 'theater' })
       }
     }
-  }, [ok, phaseKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ok, phaseKey, cast.on]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // While casting, the TV plays the room: send it the film at the live point, and the next films queued behind it.
+  // If the cast starts before showtime, the TV is sent the film when the doors close and the film begins.
+  useEffect(() => {
+    if (!ok || !cast.on) return undefined
+    let timer = null
+    const send = () => {
+      const w = viewRef.current
+      if (!w || w.phase !== 'playing') return
+      const items = timeline.slice(w.idx)
+      castLoad(items, items[0] && items[0].kind === 'live' ? 0 : w.offset)
+    }
+    const w0 = viewRef.current
+    if (w0 && w0.phase === 'lobby') timer = setTimeout(send, Math.max(0, startMs - nowMs()) + 400)
+    else if (w0 && w0.phase === 'playing') send()
+    // Keep the TV in step too: if it drifts, move it to where the room is.
+    const drift = setInterval(() => {
+      const w = viewRef.current
+      if (!w || w.phase !== 'playing' || !timeline[w.idx] || timeline[w.idx].kind === 'live') return
+      const pos = castPosition()
+      if (pos != null && Math.abs(pos - w.offset) > 6) castSeek(w.offset)
+    }, 20000)
+    return () => { if (timer) clearTimeout(timer); clearInterval(drift) }
+  }, [ok, cast.on]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleCast = () => { if (cast.on) endCast(); else requestCast().catch(() => {}) }
+  const showAirplay = () => { const v = videoRef.current; if (v && v.webkitShowPlaybackTargetPicker) v.webkitShowPlaybackTargetPicker() }
 
   // Keep everyone in step: if this viewer drifts more than a few seconds, move to where the room should be.
   useEffect(() => {
@@ -151,8 +195,15 @@ export default function CinemaRoom({ showing, onLeave }) {
     <div className={'room-grid' + (info.chat_enabled ? ' with-chat' : '')}>
       <div>
         <div className="screen-stage" ref={stageRef}>
-          <video ref={videoRef} className="player" playsInline />
-          {view.phase === 'lobby' && !info.preroll_url && (
+          <video ref={videoRef} className="player" playsInline x-webkit-airplay="allow" />
+          {cast.on && (
+            <div className="lobby-card">
+              <p className="eyebrow">Casting</p>
+              <h2>{cast.name ? 'Playing on ' + cast.name : 'Playing on your TV'}</h2>
+              <p className="note">{view.phase === 'lobby' ? 'The film will start on your TV at showtime.' : 'Your TV is playing the room. Chat stays here on this device.'}</p>
+            </div>
+          )}
+          {view.phase === 'lobby' && !info.preroll_url && !cast.on && (
             <div className="lobby-card">
               <p className="eyebrow">The doors are open</p>
               <h2>{info.title}</h2>
@@ -180,13 +231,15 @@ export default function CinemaRoom({ showing, onLeave }) {
           {view.phase === 'playing' && <span className="pill live">{late ? 'Joined late, live at ' + mmss(view.into) : 'Now showing'}</span>}
           {next && <small>Up next: {next.title}</small>}
           <span className="room-actions">
+            {cast.available && <button type="button" className="btn ghost small" onClick={toggleCast}>{cast.on ? 'Stop casting' : 'Cast to TV'}</button>}
+            {airplay && !cast.on && <button type="button" className="btn ghost small" onClick={showAirplay}>AirPlay</button>}
             <button type="button" className="btn ghost small" onClick={() => setMuted(!muted)}>{muted ? 'Unmute' : 'Mute'}</button>
             <button type="button" className="btn ghost small" onClick={fullscreen}>Fullscreen</button>
             <button type="button" className="btn ghost small" onClick={onLeave}>Leave</button>
           </span>
         </div>
         <h1 className="room-title">{info.title}</h1>
-        <p className="note small">Showtime {fmtTime(info.starts_at)}. Everyone is watching at the same point, so there is no pause or rewind.</p>
+        <p className="note small">Showtime {fmtTime(info.starts_at)}. Everyone is watching at the same point, so there is no pause or rewind. To watch on a TV, use Cast to TV (Chrome) or AirPlay (Safari), or open this page in your smart TV's browser.</p>
       </div>
       {info.chat_enabled && <ChatPanel ev={{ id: showing.id }} code="" loader={cinemaListChat} poster={(name, text, kind) => cinemaPostChat(showing.id, name, text, kind)} />}
     </div>

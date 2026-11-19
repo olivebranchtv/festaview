@@ -17,6 +17,8 @@ export default async (req) => {
 
   const s = event.data && event.data.object
   if (!s || s.payment_status !== 'paid') return json({ received: true })
+  const submissionId = s.metadata && s.metadata.submission_id
+  if (submissionId) return payEntry(s, submissionId, e)
   const showingId = s.metadata && s.metadata.showing_id
   if (showingId) return sellTicket(s, showingId, e)
   const productId = s.metadata && s.metadata.product_id
@@ -66,6 +68,30 @@ async function sellTicket(s, showingId, e) {
   const out = await res.json().catch(() => null)
   if (!res.ok || !out) return json({ error: 'Could not record the ticket' }, 500)
   if ((out.status === 'sold_out' || out.status === 'unavailable') && s.payment_intent && e.stripeKey) {
+    const rf = await fetch('https://api.stripe.com/v1/refunds', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + e.stripeKey, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ payment_intent: s.payment_intent, reason: 'requested_by_customer' }).toString(),
+    })
+    if (!rf.ok) return json({ error: 'Could not refund' }, 500)
+  }
+  return json({ received: true })
+}
+
+// A festival entry fee. Safe to receive twice. If the entry was withdrawn or already paid another way, the payer is refunded.
+async function payEntry(s, submissionId, e) {
+  const sr = await sb('submissions?id=eq.' + submissionId + '&select=festival_id')
+  const fid = sr.ok && sr.data && sr.data[0] && sr.data[0].festival_id
+  const fr = fid ? await sb('festivals?id=eq.' + fid + '&select=ticket_fee_pct') : null
+  const pct = fr && fr.ok && fr.data && fr.data[0] ? fr.data[0].ticket_fee_pct : 0
+  const amount = Number(s.amount_total || 0)
+  const r = await sb('rpc/submission_mark_paid', {
+    method: 'POST',
+    body: { p_id: submissionId, p_session: s.id, p_email: (s.customer_details && s.customer_details.email) || '', p_amount: amount, p_fee: feeCents(amount, pct) },
+  })
+  const out = r.ok && r.data
+  if (!out) return json({ error: 'Could not record the entry payment' }, 500)
+  if ((out.status === 'unavailable' || out.status === 'already_paid') && s.payment_intent && e.stripeKey) {
     const rf = await fetch('https://api.stripe.com/v1/refunds', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + e.stripeKey, 'Content-Type': 'application/x-www-form-urlencoded' },

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from './adminData.js'
+import SubmissionsTab from './SubmissionsTab.jsx'
 
 const toLocal = (iso) => (iso ? new Date(iso).toISOString().slice(0, 16) : '')
 const fromLocal = (v) => (v ? new Date(v).toISOString() : '')
@@ -1415,11 +1416,12 @@ export default function Admin() {
           )}
           {current.status === 'draft' && <GettingStarted festival={current} goTab={setTab} />}
           <nav className="tabs">
-            {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['cinema', 'Virtual theater'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
+            {[['films', 'Films'], ['submissions', 'Submissions'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['cinema', 'Virtual theater'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
               <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsgState(null) }}>{label}</button>
             ))}
           </nav>
           {tab === 'films' && <FilmsTab festival={current} setMsg={setMsg} />}
+          {tab === 'submissions' && <SubmissionsTab festival={current} setMsg={setMsg} />}
           {tab === 'live' && <LiveTab festival={current} setMsg={setMsg} />}
           {tab === 'screenings' && <ScreeningsTab festival={current} setMsg={setMsg} />}
           {tab === 'virtual' && <VirtualTab festival={current} setMsg={setMsg} />}

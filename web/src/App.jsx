@@ -6,6 +6,7 @@ import { matchRoute, STATIC_PAGES } from './paths.js'
 import { usePath, installLinkHandler } from './router.js'
 import { useSeo } from './seo.js'
 import { CinemaPage, ShowingPage, NowShowingStrip } from './cinema.jsx'
+import { SubmitIndexPage, FestivalSubmitPage, FilmmakerPage } from './submit.jsx'
 import { CONTACT_EMAIL } from './config.js'
 import {
   HomePage, FestivalsPage, FilmsPage, VirtualListPage, TvGuidePage, ChannelPage, LivePage, LiveFeedPage,
@@ -21,7 +22,7 @@ const VirtualRoom = lazy(() => import('./VirtualRoom.jsx'))
 function Header({ path }) {
   const [open, setOpen] = useState(false)
   useEffect(() => { setOpen(false) }, [path])
-  const links = [['/festivals', 'Festivals'], ['/films', 'Films'], ['/cinema', 'Virtual theater'], ['/virtual', 'Virtual cinema'], ['/tv-guide', 'TV guide'], ['/live', 'Live'], ['/watch', 'Watch'], ['/for-festivals', 'For festivals']]
+  const links = [['/festivals', 'Festivals'], ['/films', 'Films'], ['/cinema', 'Virtual theater'], ['/virtual', 'Virtual cinema'], ['/tv-guide', 'TV guide'], ['/live', 'Live'], ['/watch', 'Watch'], ['/submit', 'Submit your film'], ['/for-festivals', 'For festivals']]
   return (
     <header className="top">
       <a href="/" className="brand"><span className="mark" aria-hidden="true" />FESTAVIEW</a>
@@ -65,7 +66,7 @@ export default function App() {
   }, [])
 
   const isTheater = route && route.name === 'theater'
-  const needsData = route && !route.private && route.name !== 'about' && route.name !== 'forFestivals' && route.name !== 'watch'
+  const needsData = route && !route.private && route.name !== 'about' && route.name !== 'submitIndex' && route.name !== 'festivalSubmit' && route.name !== 'forFestivals' && route.name !== 'watch'
 
   let page = null
   if (!route) page = <NotFoundPage />
@@ -73,6 +74,9 @@ export default function App() {
   else if (route.name === 'network') page = <Suspense fallback={<p className="note pad">Loading...</p>}><PrivateTitle title="Network console" /><div className="wrap-admin"><Network /></div></Suspense>
   else if (route.name === 'theater') page = <Suspense fallback={<p className="note pad">Loading...</p>}><PrivateTitle title="Theater mode" /><Theater slug={route.slug} /></Suspense>
   else if (route.name === 'access') page = <AccessClaim search={search} />
+  else if (route.name === 'filmmaker') page = <FilmmakerPage search={search} />
+  else if (route.name === 'submitIndex') page = <SubmitIndexPage />
+  else if (route.name === 'festivalSubmit') page = <FestivalSubmitPage slug={route.slug} />
   else if (route.name === 'about') page = <AboutPage />
   else if (route.name === 'forFestivals') page = <ForFestivalsPage />
   else if (route.name === 'watch') page = <WatchPage />
