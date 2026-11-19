@@ -29,6 +29,7 @@ function statusMessage(r) {
     case 'geo_check_required': return 'We could not check your region just now. Please try again in a moment.'
     case 'full': return 'This screening is full.'
     case 'expired': return 'Your viewing window for this screening has ended.'
+    case 'unlock_expired': return 'This ticket was not started in time and has expired.'
     case 'not_found': return 'This screening is not available.'
     default: return 'Something went wrong. Please try again.'
   }
@@ -195,6 +196,7 @@ export default function VirtualRoom({ eventId, data }) {
           <li><span className={'pill ' + (st.live ? 'live' : st.ended ? 'draft' : 'published')}>{st.label}</span></li>
           <li>{ev.access === 'ticketed' ? 'Ticketed' : 'Free'}</li>
           {ev.watch_hours && <li>{ev.watch_hours} hours to finish once you press play</li>}
+          {ev.unlock_days && ev.access === 'ticketed' && <li>Press play within {ev.unlock_days} days of getting your ticket</li>}
           {ev.capacity && <li>Limited to {ev.capacity} viewers</li>}
           {region && <li>{region}</li>}
           {ev.chat_enabled && <li>Live chat and questions</li>}

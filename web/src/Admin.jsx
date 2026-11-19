@@ -741,7 +741,7 @@ function Analytics({ festival, setMsg }) {
 
 const EMPTY_EVENT = {
   kind: 'screening', title: '', description: '', poster_url: '', film_ids: [], live_stream_url: '', preroll_url: '', sponsor_name: '',
-  access: 'free', starts_at: '', available_from: '', available_until: '', watch_hours: '', capacity: '',
+  access: 'free', starts_at: '', available_from: '', available_until: '', watch_hours: '', unlock_days: '', capacity: '',
   geo_mode: 'none', geo_countries_text: '', chat_enabled: true, status: 'draft',
 }
 
@@ -768,7 +768,7 @@ function VirtualTab({ festival, setMsg }) {
   const open = (ev) => setEdit(ev ? {
     ...EMPTY_EVENT, ...ev,
     starts_at: toLocal(ev.starts_at), available_from: toLocal(ev.available_from), available_until: toLocal(ev.available_until),
-    watch_hours: ev.watch_hours ?? '', capacity: ev.capacity ?? '', geo_countries_text: (ev.geo_countries || []).join(', '),
+    watch_hours: ev.watch_hours ?? '', unlock_days: ev.unlock_days ?? '', capacity: ev.capacity ?? '', geo_countries_text: (ev.geo_countries || []).join(', '),
     film_ids: ev.film_ids || [], poster_url: ev.poster_url || '', live_stream_url: ev.live_stream_url || '', preroll_url: ev.preroll_url || '', sponsor_name: ev.sponsor_name || '', description: ev.description || '',
   } : { ...EMPTY_EVENT, film_ids: [] })
 
@@ -787,6 +787,8 @@ function VirtualTab({ festival, setMsg }) {
       watch_hours: num(edit.watch_hours), capacity: num(edit.capacity), geo_mode: edit.geo_mode, geo_countries: countries,
       chat_enabled: edit.chat_enabled, status: edit.status,
     }
+    // Only send the unlock window when it is used or the database already knows the column (keeps saving working before the SQL is run).
+    if (edit.unlock_days !== '' || (events[0] && 'unlock_days' in events[0])) row.unlock_days = num(edit.unlock_days)
     if (edit.id) row.id = edit.id
     try { await api.saveEvent(festival.id, row); setEdit(null); setMsg('Event saved.'); refresh() } catch (x) { setMsg(x.message, true) }
   }
@@ -913,9 +915,10 @@ function VirtualTab({ festival, setMsg }) {
               </select>
             </Field>
             {edit.kind === 'live' && <Field label="Live event starts"><input type="datetime-local" value={edit.starts_at} onChange={(e) => set('starts_at')(e.target.value)} /></Field>}
-            <Field label="Available from" hint="Before this, viewers can only leave their email."><input type="datetime-local" value={edit.available_from} onChange={(e) => set('available_from')(e.target.value)} /></Field>
+            <Field label="Available from" hint="The first moment someone can press play. Before this, viewers can only leave their email."><input type="datetime-local" value={edit.available_from} onChange={(e) => set('available_from')(e.target.value)} /></Field>
             <Field label="Available until"><input type="datetime-local" value={edit.available_until} onChange={(e) => set('available_until')(e.target.value)} /></Field>
-            {edit.kind !== 'live' && <Field label="Hours to finish after pressing play" hint="For example 48. Leave empty for no limit."><input value={edit.watch_hours} onChange={(e) => set('watch_hours')(e.target.value)} inputMode="numeric" /></Field>}
+            {edit.kind !== 'live' && <Field label="Watch window: hours to finish after pressing play" hint="For example 48. Viewers who pressed play in time can finish even after the availability end. Leave empty for no limit."><input value={edit.watch_hours} onChange={(e) => set('watch_hours')(e.target.value)} inputMode="numeric" /></Field>}
+            {edit.access === 'ticketed' && <Field label="Unlock window: days to start after getting a ticket" hint="For example 7. A ticket not started in time stops working. Leave empty for no limit."><input value={edit.unlock_days} onChange={(e) => set('unlock_days')(e.target.value)} inputMode="numeric" /></Field>}
             <Field label="Capacity (most viewers)" hint="Leave empty for no limit."><input value={edit.capacity} onChange={(e) => set('capacity')(e.target.value)} inputMode="numeric" /></Field>
           </div>
         </div>
