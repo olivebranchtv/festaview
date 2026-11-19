@@ -100,6 +100,17 @@ export function optionsFor(tv, device) {
   return out
 }
 
+// Screen mirroring (Miracast) often stalls on "Connecting". These fixes solve most cases.
+export const MIRROR_TROUBLE = [
+  'Wake the TV and look at it while you connect. Many TVs ask you to press OK or Allow with the remote, and the connection waits until you do.',
+  'Make sure the TV is in screen mirroring mode before you press Windows and K (on a Roku: Settings, System, Screen mirroring, Prompt).',
+  'Put the PC and the TV on the same Wi-Fi network. Turn off any VPN, and avoid guest networks.',
+  'Restart the TV (unplug it for 10 seconds) and turn Wi-Fi off and on again on the PC, then try once more.',
+  'Remove the TV from the list (Windows Settings, Bluetooth and devices) and add it again.',
+  'Update the PC Wi-Fi driver. Older drivers are the most common cause of a stuck connection. To check Miracast support, press Windows and R, type dxdiag, click Save All Information, and look for "Miracast: Available".',
+  'Some TV models, including many newer Samsung sets, do not accept mirroring from Windows. Use the TV web browser (festaview.com/cinema) or an HDMI cable instead.',
+]
+
 export const GENERAL_TIPS = [
   'Everyone watches at the same moment. Casting or mirroring does not give you pause or rewind, the same as a real theater.',
   'Mirroring shows exactly what is on your screen, so it may run a few seconds behind other viewers. Casting with the Cast to TV button keeps the TV in step with the room.',

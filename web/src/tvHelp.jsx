@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSeo } from './seo.js'
-import { TVS, DEVICES, TV_NOTES, GENERAL_TIPS, optionsFor, detectDevice } from './tvHelpContent.js'
+import { TVS, DEVICES, TV_NOTES, GENERAL_TIPS, MIRROR_TROUBLE, optionsFor, detectDevice } from './tvHelpContent.js'
 
 // Pick your TV and your device, get the steps. Used on the help page and inside the theater room.
 export function TvGuide({ compact }) {
@@ -33,6 +33,12 @@ export function TvGuide({ compact }) {
             <section key={o.name} className="tvhelp-opt">
               <h3>{o.name}</h3>
               <ol>{o.steps.map((s) => <li key={s}>{s}</li>)}</ol>
+              {o.name === 'Screen mirroring' && (
+                <details className="tvhelp-trouble">
+                  <summary>Stuck on Connecting? Try these</summary>
+                  <ul>{MIRROR_TROUBLE.map((t) => <li key={t}>{t}</li>)}</ul>
+                </details>
+              )}
             </section>
           ))}
         </div>
