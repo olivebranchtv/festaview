@@ -446,3 +446,16 @@ export async function moderateChat(id, patch) {
   const r = await supabase.from('chat_messages').update(patch).eq('id', id)
   if (r.error) throw r.error
 }
+
+// ---- self-serve festival creation ----
+export async function createMyFestival(f) {
+  if (isDemo) {
+    const s = load()
+    s.festival = { ...s.festival, name: f.name, tagline: f.tagline || '', location: f.location || '', website: f.website || '' }
+    persist(s)
+    return { id: s.festival.id, slug: s.festival.slug }
+  }
+  const r = await supabase.rpc('create_my_festival', { p_name: f.name, p_tagline: f.tagline || null, p_location: f.location || null, p_website: f.website || null })
+  if (r.error) throw r.error
+  return r.data
+}

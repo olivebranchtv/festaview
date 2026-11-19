@@ -433,3 +433,13 @@ button.live-card.playable:hover { transform: translateY(-3px); }
 
 /* menu links should not leave the section heading hidden under the sticky header */
 .block[id] { scroll-margin-top: 84px; }
+
+/* onboarding */
+.panel.wide-form { max-width: 640px; margin-left: auto; margin-right: auto; }
+.steps { list-style: none; margin: 12px 0 0; padding: 0; }
+.steps li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.steps li:first-child { border-top: 0; }
+.steps .tick { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; min-width: 56px; color: var(--gold); }
+.steps li.done .tick { color: #5fd68a; }
+.steps li.done span:nth-child(2) { color: var(--muted); text-decoration: line-through; }
+.steps li .btn { margin-left: auto; }

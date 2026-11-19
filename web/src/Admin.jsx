@@ -41,7 +41,7 @@ function Login({ onDone }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr] = useState('')
-  const [signup, setSignup] = useState(false)
+  const [signup, setSignup] = useState(() => /[?&]signup=1/.test(window.location.search + window.location.hash))
   const [info, setInfo] = useState('')
   const submit = async (e) => {
     e.preventDefault()
@@ -49,7 +49,7 @@ function Login({ onDone }) {
     try {
       if (signup) {
         await api.signUp(email, password)
-        setInfo('Account created. Check your email to confirm it if asked, then tell Festaview which festival you run so we can link it.')
+        setInfo('Account created. If we asked you to confirm your email, open the message we sent, then come back here and sign in. You will create your festival right after.')
       } else {
         await api.signIn(email, password); onDone()
       }
@@ -1123,11 +1123,72 @@ function AccessTab({ festival, setMsg }) {
   )
 }
 
+// First step for a new festival director: name the festival and it is created and linked to the account automatically.
+function CreateFestival({ first, onCancel, onCreated, setMsg }) {
+  const [f, setF] = useState({ name: '', tagline: '', location: '', website: '' })
+  const [busy, setBusy] = useState(false)
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+  const submit = async (e) => {
+    e.preventDefault()
+    let website = f.website.trim()
+    if (website && !/^https?:\/\//i.test(website)) website = 'https://' + website
+    setBusy(true)
+    try {
+      const res = await api.createMyFestival({ ...f, website })
+      onCreated(res)
+    } catch (x) { setMsg(x.message, true) }
+    setBusy(false)
+  }
+  return (
+    <form className="panel narrow wide-form" onSubmit={submit}>
+      <h2>{first ? 'Create your festival' : 'Create another festival'}</h2>
+      <p className="note">{first ? 'Welcome. ' : ''}Tell us the basics. Your festival is created right away and stays private (a draft) until you publish it. You can change everything later.</p>
+      <Field label="Festival name"><input value={f.name} onChange={set('name')} required minLength={2} maxLength={120} autoFocus /></Field>
+      <Field label="Tagline (optional)"><input value={f.tagline} onChange={set('tagline')} maxLength={160} placeholder="One line that describes your festival" /></Field>
+      <div className="two">
+        <Field label="Location (optional)"><input value={f.location} onChange={set('location')} placeholder="City, State or Country" /></Field>
+        <Field label="Website (optional)"><input value={f.website} onChange={set('website')} placeholder="https://" /></Field>
+      </div>
+      <div className="actions">
+        <button className="btn" type="submit" disabled={busy}>{busy ? 'Creating...' : 'Create my festival'}</button>
+        {!first && <button className="btn ghost" type="button" onClick={onCancel}>Cancel</button>}
+      </div>
+    </form>
+  )
+}
+
+// Shown while a festival is still a draft: what is left to do before it can go public.
+function GettingStarted({ festival, goTab }) {
+  const [filmCount, setFilmCount] = useState(null)
+  useEffect(() => { api.listFilms(festival.id).then((l) => setFilmCount(l.length)).catch(() => setFilmCount(0)) }, [festival.id])
+  const steps = [
+    [!!(festival.logo_url || festival.banner_url), 'Add a logo or banner and your festival details', 'festival'],
+    [(filmCount || 0) > 0, 'Add your first film', 'films'],
+    [festival.status === 'published', 'Publish your festival (Festival page, Visibility)', 'festival'],
+  ]
+  return (
+    <div className="panel getting-started">
+      <h2>Getting started</h2>
+      <p className="note">Your festival is a private draft. Visitors cannot see it until you publish it.</p>
+      <ul className="steps">
+        {steps.map(([done, text, tab]) => (
+          <li key={text} className={done ? 'done' : ''}>
+            <span className="tick" aria-hidden="true">{done ? 'Done' : 'To do'}</span>
+            <span>{text}</span>
+            {!done && <button type="button" className="btn ghost small" onClick={() => goTab(tab)}>Go</button>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export default function Admin() {
   const [session, setSession] = useState(undefined)
   const [festivals, setFestivals] = useState(null)
   const [current, setCurrent] = useState(null)
   const [tab, setTab] = useState('films')
+  const [creating, setCreating] = useState(false)
   const [msg, setMsgState] = useState(null)
   const setMsg = useCallback((text, isError) => setMsgState({ text, isError: !!isError }), [])
   // Messages float on screen so they are seen wherever the page is scrolled, then fade out.
@@ -1156,6 +1217,7 @@ export default function Admin() {
         <h1>Festival admin</h1>
         <div>
           {api.isDemo && <span className="pill draft">Demo mode (saved in this browser only)</span>}
+          {festivals && festivals.length > 0 && festivals.length < 3 && !creating && !api.isDemo && <button className="btn ghost" onClick={() => setCreating(true)}>New festival</button>}
           {!api.isDemo && <button className="btn ghost" onClick={() => api.signOut()}>Sign out</button>}
         </div>
       </div>
@@ -1165,14 +1227,28 @@ export default function Admin() {
           <button type="button" onClick={() => setMsgState(null)} aria-label="Dismiss">Close</button>
         </div>
       )}
-      {festivals && festivals.length === 0 && <p className="note">Your account is not linked to a festival yet. Ask Festaview to connect it.</p>}
-      {current && (
+      {festivals && (festivals.length === 0 || creating) && (
+        <CreateFestival
+          first={festivals.length === 0}
+          setMsg={setMsg}
+          onCancel={() => setCreating(false)}
+          onCreated={async (res) => {
+            const list = await api.myFestivals()
+            setFestivals(list)
+            setCurrent(list.find((x) => x.id === res.id) || list[0] || null)
+            setCreating(false); setTab('festival')
+            setMsg('Your festival was created. It is a private draft until you publish it.')
+          }}
+        />
+      )}
+      {current && !creating && (
         <>
           {festivals.length > 1 && (
             <select className="picker" value={current.id} onChange={(e) => setCurrent(festivals.find((f) => f.id === e.target.value))}>
               {festivals.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           )}
+          {current.status === 'draft' && <GettingStarted festival={current} goTab={setTab} />}
           <nav className="tabs">
             {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
               <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsgState(null) }}>{label}</button>
