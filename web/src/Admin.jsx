@@ -739,32 +739,265 @@ function Analytics({ festival, setMsg }) {
   )
 }
 
+const EMPTY_EVENT = {
+  kind: 'screening', title: '', description: '', poster_url: '', film_ids: [], live_stream_url: '', preroll_url: '', sponsor_name: '',
+  access: 'free', starts_at: '', available_from: '', available_until: '', watch_hours: '', capacity: '',
+  geo_mode: 'none', geo_countries_text: '', chat_enabled: true, status: 'draft',
+}
+
+// Virtual cinema: scheduled online screenings, programs and live events with windows, capacity, region rules and chat.
+function VirtualTab({ festival, setMsg }) {
+  const [events, setEvents] = useState([])
+  const [films, setFilms] = useState([])
+  const [counts, setCounts] = useState({})
+  const [edit, setEdit] = useState(null)
+  const [mod, setMod] = useState(null)
+  const [chat, setChat] = useState([])
+  const [reservations, setReservations] = useState([])
+
+  const refresh = useCallback(async () => {
+    try {
+      const [ev, fl] = await Promise.all([api.listEvents(festival.id), api.listFilms(festival.id)])
+      setEvents(ev); setFilms(fl)
+      setCounts(await api.eventSessionCounts(ev.map((x) => x.id)))
+    } catch (e) { setMsg(e.message, true) }
+  }, [festival.id, setMsg])
+  useEffect(() => { refresh() }, [refresh])
+
+  const set = (k) => (v) => setEdit((p) => ({ ...p, [k]: v }))
+  const open = (ev) => setEdit(ev ? {
+    ...EMPTY_EVENT, ...ev,
+    starts_at: toLocal(ev.starts_at), available_from: toLocal(ev.available_from), available_until: toLocal(ev.available_until),
+    watch_hours: ev.watch_hours ?? '', capacity: ev.capacity ?? '', geo_countries_text: (ev.geo_countries || []).join(', '),
+    film_ids: ev.film_ids || [], poster_url: ev.poster_url || '', live_stream_url: ev.live_stream_url || '', preroll_url: ev.preroll_url || '', sponsor_name: ev.sponsor_name || '', description: ev.description || '',
+  } : { ...EMPTY_EVENT, film_ids: [] })
+
+  const save = async (e) => {
+    e.preventDefault()
+    const countries = edit.geo_countries_text.split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x))
+    if (!edit.title.trim()) { setMsg('Give the event a title.', true); return }
+    if (edit.kind !== 'live' && edit.film_ids.length === 0) { setMsg('Add at least one film.', true); return }
+    if (edit.kind === 'live' && !edit.live_stream_url.trim()) { setMsg('A live event needs a stream link.', true); return }
+    if (edit.geo_mode !== 'none' && countries.length === 0) { setMsg('Enter at least one two-letter country code, for example US, CA.', true); return }
+    if (edit.available_from && edit.available_until && new Date(edit.available_until) <= new Date(edit.available_from)) { setMsg('The availability end must be after its start.', true); return }
+    const row = {
+      kind: edit.kind, title: edit.title.trim(), description: edit.description, poster_url: edit.poster_url,
+      film_ids: edit.kind === 'live' ? [] : edit.film_ids, live_stream_url: edit.live_stream_url, preroll_url: edit.preroll_url, sponsor_name: edit.sponsor_name,
+      access: edit.access, starts_at: fromLocal(edit.starts_at), available_from: fromLocal(edit.available_from), available_until: fromLocal(edit.available_until),
+      watch_hours: num(edit.watch_hours), capacity: num(edit.capacity), geo_mode: edit.geo_mode, geo_countries: countries,
+      chat_enabled: edit.chat_enabled, status: edit.status,
+    }
+    if (edit.id) row.id = edit.id
+    try { await api.saveEvent(festival.id, row); setEdit(null); setMsg('Event saved.'); refresh() } catch (x) { setMsg(x.message, true) }
+  }
+  const remove = async (ev) => {
+    if (!window.confirm('Delete "' + ev.title + '"? Chat and viewing records for it are deleted too.')) return
+    try { await api.deleteEvent(ev.id); refresh() } catch (x) { setMsg(x.message, true) }
+  }
+  const openMod = async (ev) => {
+    setMod(ev)
+    try { setChat(await api.listChatAdmin(ev.id)); setReservations(await api.listReservations(ev.id)) } catch (x) { setMsg(x.message, true) }
+  }
+  const moderate = async (m, patch) => {
+    try { await api.moderateChat(m.id, patch); setChat(await api.listChatAdmin(mod.id)) } catch (x) { setMsg(x.message, true) }
+  }
+  const move = (i, d) => setEdit((p) => { const a = p.film_ids.slice(); const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, film_ids: a } })
+  const title = (id) => { const f = films.find((x) => x.id === id); return f ? f.title : '(removed film)' }
+  const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '')
+
+  if (mod) {
+    const questions = chat.filter((m) => m.kind === 'question')
+    return (
+      <div>
+        <div className="panel">
+          <div className="actions"><button className="btn ghost" onClick={() => setMod(null)}>Back to events</button></div>
+          <h2>{mod.title}</h2>
+          <div className="kpis">
+            <div className="kpi"><span>Viewers who pressed play</span><strong>{counts[mod.id] || 0}</strong><small>{mod.capacity ? 'of ' + mod.capacity + ' places' : 'no limit set'}</small></div>
+            <div className="kpi"><span>Email reservations</span><strong>{reservations.length}</strong><small>people waiting to be told</small></div>
+            <div className="kpi"><span>Questions</span><strong>{questions.length}</strong><small>{questions.filter((m) => !m.answered).length} unanswered</small></div>
+          </div>
+          {reservations.length > 0 && <button className="btn ghost" onClick={() => downloadCsv('reservations-' + mod.id.slice(0, 8) + '.csv', [['Email', 'Reserved'], ...reservations.map((r) => [r.email, r.created_at])])}>Download reservation emails</button>}
+        </div>
+        <div className="panel">
+          <h2>Chat and questions</h2>
+          {api.isDemo && <p className="note">Moderation needs a connected database.</p>}
+          {chat.length === 0 && !api.isDemo && <p className="note">No messages yet.</p>}
+          <ul className="list">
+            {chat.map((m) => (
+              <li key={m.id}>
+                <div>
+                  <strong>{m.name}</strong> {m.kind === 'question' && <span className="pill published">question</span>} {m.answered && <span className="pill">answered</span>} {m.hidden && <span className="pill draft">hidden</span>}
+                  <small className="wrapnote">{m.body}</small>
+                </div>
+                {m.kind === 'question' && <button type="button" className="btn ghost" onClick={() => moderate(m, { answered: !m.answered })}>{m.answered ? 'Reopen' : 'Mark answered'}</button>}
+                <button type="button" className="btn ghost danger" onClick={() => moderate(m, { hidden: !m.hidden })}>{m.hidden ? 'Show' : 'Hide'}</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    )
+  }
+
+  if (edit) {
+    const picked = edit.film_ids.map((id) => films.find((f) => f.id === id)).filter(Boolean)
+    const exposed = edit.access === 'ticketed' ? picked.filter((f) => f.access !== 'ticketed' && f.status === 'published') : []
+    return (
+      <form className="panel" onSubmit={save}>
+        <h2>{edit.id ? 'Edit event' : 'New virtual event'}</h2>
+        <div className="two">
+          <Field label="Type">
+            <select value={edit.kind} onChange={(e) => set('kind')(e.target.value)}>
+              <option value="screening">Screening (one film)</option>
+              <option value="program">Program (several films, one unlock)</option>
+              <option value="live">Live event (stream with chat and Q&A)</option>
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={edit.status} onChange={(e) => set('status')(e.target.value)}>
+              <option value="draft">Draft (hidden)</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Title"><input value={edit.title} onChange={(e) => set('title')(e.target.value)} required /></Field>
+        <Field label="Description"><textarea rows={3} value={edit.description} onChange={(e) => set('description')(e.target.value)} /></Field>
+        <ImageField label="Poster" value={edit.poster_url} onChange={set('poster_url')} festivalId={festival.id} onError={(m) => setMsg(m, true)} />
+
+        {edit.kind !== 'live' && (
+          <div className="subpanel">
+            <h3>{edit.kind === 'program' ? 'Films in this program (in order)' : 'Film'}</h3>
+            <ul className="list">
+              {edit.film_ids.length === 0 && <li><span className="note">No film chosen yet.</span></li>}
+              {edit.film_ids.map((id, i) => (
+                <li key={id}>
+                  <div><strong>{title(id)}</strong></div>
+                  {edit.kind === 'program' && <><button type="button" className="btn ghost small" onClick={() => move(i, -1)}>Up</button><button type="button" className="btn ghost small" onClick={() => move(i, 1)}>Down</button></>}
+                  <button type="button" className="btn ghost small danger" onClick={() => set('film_ids')(edit.film_ids.filter((x) => x !== id))}>Remove</button>
+                </li>
+              ))}
+            </ul>
+            <select value="" onChange={(e) => { const v = e.target.value; if (!v) return; if (edit.kind === 'screening') set('film_ids')([v]); else if (!edit.film_ids.includes(v)) set('film_ids')([...edit.film_ids, v]) }}>
+              <option value="">{edit.kind === 'program' ? 'Add a film' : 'Choose the film'}</option>
+              {films.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
+            </select>
+            {exposed.length > 0 && (
+              <p className="error small">Warning: {exposed.map((f) => f.title).join(', ')} {exposed.length === 1 ? 'is' : 'are'} also free and public on your festival page, so this ticket does not protect {exposed.length === 1 ? 'it' : 'them'}. Set the film to Ticketed or Draft under Films.</p>
+            )}
+          </div>
+        )}
+
+        {edit.kind === 'live' && (
+          <Field label="Live stream link (HLS .m3u8)" hint="Your live streaming service gives you this. See Live channels, How to run a live channel.">
+            <input value={edit.live_stream_url} onChange={(e) => set('live_stream_url')(e.target.value)} placeholder="https://.../live.m3u8" />
+          </Field>
+        )}
+        {edit.kind === 'live' && <StreamTest url={edit.live_stream_url} />}
+
+        <div className="two">
+          <Field label="Sponsor message (optional)" hint="A short video that plays before the show, with your sponsor named above it.">
+            <input value={edit.preroll_url} onChange={(e) => set('preroll_url')(e.target.value)} placeholder="https://.../sponsor.m3u8 or .mp4" />
+          </Field>
+          <Field label="Sponsor name"><input value={edit.sponsor_name} onChange={(e) => set('sponsor_name')(e.target.value)} /></Field>
+        </div>
+
+        <div className="subpanel">
+          <h3>When and who</h3>
+          <div className="two">
+            <Field label="Who can watch">
+              <select value={edit.access} onChange={(e) => set('access')(e.target.value)}>
+                <option value="free">Everyone (free)</option>
+                <option value="ticketed">Ticket or access code holders</option>
+              </select>
+            </Field>
+            {edit.kind === 'live' && <Field label="Live event starts"><input type="datetime-local" value={edit.starts_at} onChange={(e) => set('starts_at')(e.target.value)} /></Field>}
+            <Field label="Available from" hint="Before this, viewers can only leave their email."><input type="datetime-local" value={edit.available_from} onChange={(e) => set('available_from')(e.target.value)} /></Field>
+            <Field label="Available until"><input type="datetime-local" value={edit.available_until} onChange={(e) => set('available_until')(e.target.value)} /></Field>
+            {edit.kind !== 'live' && <Field label="Hours to finish after pressing play" hint="For example 48. Leave empty for no limit."><input value={edit.watch_hours} onChange={(e) => set('watch_hours')(e.target.value)} inputMode="numeric" /></Field>}
+            <Field label="Capacity (most viewers)" hint="Leave empty for no limit."><input value={edit.capacity} onChange={(e) => set('capacity')(e.target.value)} inputMode="numeric" /></Field>
+          </div>
+        </div>
+
+        <div className="subpanel">
+          <h3>Region</h3>
+          <p className="note small">Region rules are checked on Festaview's server from the viewer's location. Press and industry codes (Access and sales tab) can skip them. A VPN can get around location checks.</p>
+          <div className="two">
+            <Field label="Rule">
+              <select value={edit.geo_mode} onChange={(e) => set('geo_mode')(e.target.value)}>
+                <option value="none">Available everywhere</option>
+                <option value="allow">Only in these countries</option>
+                <option value="block">Everywhere except these countries</option>
+              </select>
+            </Field>
+            {edit.geo_mode !== 'none' && <Field label="Country codes" hint="Two letters each, separated by commas, for example US, CA, GB."><input value={edit.geo_countries_text} onChange={(e) => set('geo_countries_text')(e.target.value)} /></Field>}
+          </div>
+        </div>
+
+        <label className="check"><input type="checkbox" checked={edit.chat_enabled} onChange={(e) => set('chat_enabled')(e.target.checked)} /> Live chat and audience questions</label>
+        <div className="actions">
+          <button className="btn" type="submit">Save event</button>
+          <button className="btn ghost" type="button" onClick={() => setEdit(null)}>Cancel</button>
+        </div>
+      </form>
+    )
+  }
+
+  return (
+    <div className="panel">
+      <p className="note">Virtual cinema: online screenings, programs and live events with watch windows, capacity limits, region rules, sponsor messages, chat and Q&A. Real copy protection (DRM and forensic watermarking) is not included: see the notes in docs/virtual-cinema.md.</p>
+      <div className="actions"><button className="btn" onClick={() => open(null)}>New virtual event</button></div>
+      <ul className="list">
+        {events.length === 0 && <li><span className="note">No virtual events yet.</span></li>}
+        {events.map((ev) => (
+          <li key={ev.id}>
+            <div>
+              <strong>{ev.title}</strong>
+              <small>{{ screening: 'Screening', program: 'Program', live: 'Live event' }[ev.kind]} | {ev.access === 'ticketed' ? 'Ticketed' : 'Free'}{ev.available_from ? ' | from ' + when(ev.available_from) : ''}{ev.available_until ? ' until ' + when(ev.available_until) : ''} | {counts[ev.id] || 0} watching{ev.capacity ? ' of ' + ev.capacity : ''}</small>
+            </div>
+            <span className={'pill ' + ev.status}>{ev.status}</span>
+            <a className="btn ghost" href={'#/virtual/' + ev.id}>View</a>
+            <button className="btn ghost" onClick={() => openMod(ev)}>Moderate</button>
+            <button className="btn ghost" onClick={() => open(ev)}>Edit</button>
+            <button className="btn ghost danger" onClick={() => remove(ev)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 // Passes, tickets, access codes and sales for one festival.
 function AccessTab({ festival, setMsg }) {
   const [products, setProducts] = useState([])
   const [films, setFilms] = useState([])
   const [ents, setEnts] = useState([])
-  const [p, setP] = useState({ name: '', description: '', price: '', film_id: '' })
-  const [c, setC] = useState({ count: '5', film_id: '', note: '', expires: '' })
+  const [p, setP] = useState({ name: '', description: '', price: '', target: '' })
+  const [c, setC] = useState({ count: '5', target: '', note: '', expires: '', overrides: false })
   const [fresh, setFresh] = useState([])
+  const [events, setEvents] = useState([])
 
   const refresh = useCallback(async () => {
     try {
       const [pr, fl, en] = await Promise.all([api.listProducts(festival.id), api.listFilms(festival.id), api.listEntitlements(festival.id)])
       setProducts(pr); setFilms(fl); setEnts(en)
+      api.listEvents(festival.id).then(setEvents).catch(() => {})
     } catch (e) { setMsg(e.message, true) }
   }, [festival.id, setMsg])
   useEffect(() => { refresh() }, [refresh])
 
   const filmName = (id) => { const f = films.find((x) => x.id === id); return f ? f.title : 'All ticketed films' }
+  const scopeName = (x) => (x.event_id ? 'Event: ' + ((events.find((v) => v.id === x.event_id) || {}).title || '(removed)') : x.film_id ? filmName(x.film_id) : 'All ticketed films')
+  const parseTarget = (t) => (t.startsWith('f:') ? { film_id: t.slice(2), event_id: '' } : t.startsWith('e:') ? { film_id: '', event_id: t.slice(2) } : { film_id: '', event_id: '' })
   const money2 = (cents) => '$' + (Number(cents || 0) / 100).toFixed(2)
 
   const addProduct = async () => {
     const price = parseFloat(p.price)
     if (!p.name || !(price >= 0)) { setMsg('Enter a name and a price (0 or more).', true); return }
     try {
-      await api.saveProduct(festival.id, { name: p.name, description: p.description, price_cents: Math.round(price * 100), film_id: p.film_id, currency: 'usd' })
-      setP({ name: '', description: '', price: '', film_id: '' }); setMsg('Added.'); refresh()
+      await api.saveProduct(festival.id, { name: p.name, description: p.description, price_cents: Math.round(price * 100), ...parseTarget(p.target), currency: 'usd' })
+      setP({ name: '', description: '', price: '', target: '' }); setMsg('Added.'); refresh()
     } catch (x) { setMsg(x.message, true) }
   }
   const toggle = async (x) => { try { await api.setProductActive(x.id, !x.active); refresh() } catch (e) { setMsg(e.message, true) } }
@@ -776,7 +1009,8 @@ function AccessTab({ festival, setMsg }) {
     const n = parseInt(c.count, 10)
     if (!(n >= 1 && n <= 200)) { setMsg('Choose between 1 and 200 codes.', true); return }
     try {
-      const codes = await api.createCompCodes(festival.id, n, c.film_id, c.note, c.expires ? fromLocal(c.expires) : '')
+      const t = parseTarget(c.target)
+      const codes = await api.createCompCodes(festival.id, n, t.film_id, c.note, c.expires ? fromLocal(c.expires) : '', t.event_id, c.overrides)
       setFresh(codes); setMsg(codes.length + ' code(s) created. Copy them now or find them in the list below.'); refresh()
     } catch (x) { setMsg(x.message, true) }
   }
@@ -808,7 +1042,7 @@ function AccessTab({ festival, setMsg }) {
           {products.length === 0 && <li><span className="note">Nothing for sale yet.</span></li>}
           {products.map((x) => (
             <li key={x.id}>
-              <div><strong>{x.name}</strong><small>{money2(x.price_cents)} | {x.film_id ? filmName(x.film_id) : 'All ticketed films'}{x.description ? ' | ' + x.description : ''}</small></div>
+              <div><strong>{x.name}</strong><small>{money2(x.price_cents)} | {scopeName(x)}{x.description ? ' | ' + x.description : ''}</small></div>
               <span className={'pill ' + (x.active ? 'published' : 'draft')}>{x.active ? 'on sale' : 'hidden'}</span>
               <button type="button" className="btn ghost" onClick={() => toggle(x)}>{x.active ? 'Hide' : 'Show'}</button>
               <button type="button" className="btn ghost danger" onClick={() => removeProduct(x)}>Delete</button>
@@ -819,9 +1053,10 @@ function AccessTab({ festival, setMsg }) {
           <Field label="Name (e.g. Festival Pass)"><input value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} /></Field>
           <Field label="Price in dollars"><input value={p.price} inputMode="decimal" onChange={(e) => setP({ ...p, price: e.target.value })} /></Field>
           <Field label="Covers">
-            <select value={p.film_id} onChange={(e) => setP({ ...p, film_id: e.target.value })}>
+            <select value={p.target} onChange={(e) => setP({ ...p, target: e.target.value })}>
               <option value="">All ticketed films (a pass)</option>
-              {films.filter((f) => f.access === 'ticketed').map((f) => <option key={f.id} value={f.id}>{f.title} (one film)</option>)}
+              {films.filter((f) => f.access === 'ticketed').map((f) => <option key={f.id} value={'f:' + f.id}>{f.title} (one film)</option>)}
+              {events.map((v) => <option key={v.id} value={'e:' + v.id}>{v.title} (virtual event)</option>)}
             </select>
           </Field>
           <Field label="Short description"><input value={p.description} onChange={(e) => setP({ ...p, description: e.target.value })} /></Field>
@@ -835,11 +1070,13 @@ function AccessTab({ festival, setMsg }) {
         <div className="two">
           <Field label="How many codes"><input value={c.count} inputMode="numeric" onChange={(e) => setC({ ...c, count: e.target.value })} /></Field>
           <Field label="Works for">
-            <select value={c.film_id} onChange={(e) => setC({ ...c, film_id: e.target.value })}>
+            <select value={c.target} onChange={(e) => setC({ ...c, target: e.target.value })}>
               <option value="">All ticketed films</option>
-              {films.filter((f) => f.access === 'ticketed').map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
+              {films.filter((f) => f.access === 'ticketed').map((f) => <option key={f.id} value={'f:' + f.id}>{f.title}</option>)}
+              {events.map((v) => <option key={v.id} value={'e:' + v.id}>{v.title} (virtual event)</option>)}
             </select>
           </Field>
+          <label className="check"><input type="checkbox" checked={c.overrides} onChange={(e) => setC({ ...c, overrides: e.target.checked })} /> Press or industry code (ignores region limits)</label>
           <Field label="Note (who is it for)"><input value={c.note} onChange={(e) => setC({ ...c, note: e.target.value })} /></Field>
           <Field label="Expires (optional)"><input type="datetime-local" value={c.expires} onChange={(e) => setC({ ...c, expires: e.target.value })} /></Field>
         </div>
@@ -868,7 +1105,7 @@ function AccessTab({ festival, setMsg }) {
               {ents.length === 0 && <tr><td colSpan={7} className="note">No codes or sales yet.</td></tr>}
               {ents.map((e) => (
                 <tr key={e.id}>
-                  <td>{e.code}</td><td>{e.source === 'stripe' ? 'Purchase' : 'Free code'}</td><td>{e.film_id ? filmName(e.film_id) : 'All ticketed'}</td>
+                  <td>{e.code}</td><td>{e.source === 'stripe' ? 'Purchase' : 'Free code'}</td><td>{scopeName(e)}</td>
                   <td>{e.email || e.note || ''}</td><td>{money2(e.amount_cents)}</td>
                   <td><span className={'pill ' + (e.status === 'active' ? 'published' : 'draft')}>{e.status}</span></td>
                   <td>{e.status === 'active' && <button type="button" className="btn ghost danger" onClick={() => revoke(e)}>Revoke</button>}</td>
@@ -923,13 +1160,14 @@ export default function Admin() {
             </select>
           )}
           <nav className="tabs">
-            {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
+            {[['films', 'Films'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
               <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsgState(null) }}>{label}</button>
             ))}
           </nav>
           {tab === 'films' && <FilmsTab festival={current} setMsg={setMsg} />}
           {tab === 'live' && <LiveTab festival={current} setMsg={setMsg} />}
           {tab === 'screenings' && <ScreeningsTab festival={current} setMsg={setMsg} />}
+          {tab === 'virtual' && <VirtualTab festival={current} setMsg={setMsg} />}
           {tab === 'access' && <AccessTab festival={current} setMsg={setMsg} />}
           {tab === 'analytics' && <Analytics festival={current} setMsg={setMsg} />}
           {tab === 'festival' && (

@@ -59,6 +59,18 @@ paperMoon.access = 'ticketed'
 paperMoon.video_url = null
 DEMO.festivals[2].payments_enabled = true
 DEMO.festivals[2].description = 'Big stories in small runtimes. Free shorts all week, with ticketed premieres.'
+const DEMO_CHAT = {}
+const inH = (h) => new Date(Date.now() + h * 3600e3).toISOString()
+DEMO.events = [
+  { id: 'v1', festival_id: 'f1', kind: 'screening', title: 'Harborlight Opening Night', description: 'A premiere screening of our opening film, free to watch for 48 hours after you press play.', film_ids: ['m0'], preroll_url: DEMO_TRAILER, sponsor_name: 'Lighthouse Coffee', access: 'free', available_from: inH(-24), available_until: inH(72), watch_hours: 48, capacity: 500, geo_mode: 'none', geo_countries: [], chat_enabled: true, status: 'published' },
+  { id: 'v2', festival_id: 'f2', kind: 'live', title: 'Night Owl Live: Q&A with the filmmakers', description: 'Join the live conversation. Chat and ask questions.', film_ids: [], live_stream_url: DEMO_TRAILER, access: 'free', starts_at: inH(-0.2), available_until: inH(5), geo_mode: 'none', geo_countries: [], chat_enabled: true, status: 'published' },
+  { id: 'v4', festival_id: 'f1', kind: 'screening', title: 'Harborlight Closing Night Premiere', description: 'Opens in two days. Leave your email and we will tell you when it is ready.', film_ids: ['m1'], access: 'free', available_from: inH(48), available_until: inH(168), watch_hours: 72, geo_mode: 'none', geo_countries: [], chat_enabled: true, status: 'published' },
+  { id: 'v3', festival_id: 'f3', kind: 'program', title: 'Shortcut Shorts Program A', description: 'Two award-nominated shorts in one ticketed program.', film_ids: ['m5', 'm6'], access: 'ticketed', available_from: inH(-2), available_until: inH(96), watch_hours: 24, geo_mode: 'allow', geo_countries: ['US', 'CA'], chat_enabled: true, status: 'published' },
+]
+DEMO_CHAT.v2 = [
+  { id: 1, name: 'Maya', body: 'So excited for this one!', kind: 'chat', answered: false, created_at: inH(-0.1) },
+  { id: 2, name: 'Jordan', body: 'How long did the shoot take?', kind: 'question', answered: false, created_at: inH(-0.08) },
+]
 DEMO.products = [
   { id: 'p1', festival_id: 'f3', film_id: null, name: 'Festival Pass', description: 'Every ticketed screening', price_cents: 2500, currency: 'usd' },
   { id: 'p2', festival_id: 'f3', film_id: 'm6', name: 'Paper Moon ticket', description: 'Single screening', price_cents: 500, currency: 'usd' },
@@ -74,7 +86,7 @@ export async function loadData() {
     if (!v.error) return v
     return supabase.from('films').select('*').eq('status', 'published').order('created_at', { ascending: false })
   }
-  const [f, m, l, s, v, sc, pr] = await Promise.all([
+  const [f, m, l, s, v, sc, pr, ve] = await Promise.all([
     supabase.from('festivals').select('*').eq('status', 'published').order('sort_order').order('name'),
     filmsQuery(),
     supabase.from('live_feeds').select('*'),
@@ -83,9 +95,65 @@ export async function loadData() {
     supabase.from('venues').select('*'),
     supabase.from('screenings').select('*').gte('ends_at', new Date().toISOString()).order('starts_at').limit(300),
     supabase.from('products').select('*').eq('active', true).order('price_cents'),
+    // Virtual events are optional: if their table is missing, the site still loads.
+    supabase.from('virtual_events').select('*').order('starts_at', { ascending: true, nullsFirst: false }),
   ])
   if (f.error) throw f.error
-  return { demo: false, festivals: f.data || [], films: m.data || [], feeds: l.data || [], schedule: s.data || [], venues: v.data || [], screenings: sc.data || [], products: pr.data || [] }
+  return { demo: false, festivals: f.data || [], films: m.data || [], feeds: l.data || [], schedule: s.data || [], venues: v.data || [], screenings: sc.data || [], products: pr.data || [], events: ve.data || [] }
+}
+
+// ---- virtual cinema ----
+const VIRTUAL_FN = '/.netlify/functions/virtual-start'
+
+// Starts or resumes a viewer's screening. Events with region rules go through the server function, which knows the
+// viewer's real country. Other events ask the database directly.
+export async function startVirtual(ev, code) {
+  if (!supabase) return demoStart(ev, code)
+  try {
+    if (ev.geo_mode && ev.geo_mode !== 'none') {
+      const res = await fetch(VIRTUAL_FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ eventId: ev.id, code: code || '', device: deviceId() }) })
+      const j = await res.json().catch(() => null)
+      return j && j.status ? j : { status: 'geo_check_required' }
+    }
+    const r = await supabase.rpc('virtual_start', { p_event: ev.id, p_code: code || '', p_device: deviceId(), p_country: null })
+    return r.error || !r.data ? { status: 'error' } : r.data
+  } catch { return { status: 'error' } }
+}
+
+export async function listChat(eventId) {
+  if (!supabase) return DEMO_CHAT[eventId] || []
+  const r = await supabase.from('chat_messages').select('id,name,body,kind,answered,created_at').eq('event_id', eventId).order('id', { ascending: false }).limit(60)
+  return r.error ? [] : (r.data || []).reverse()
+}
+
+export async function postChat(ev, code, name, body, kind) {
+  if (!supabase) {
+    const list = (DEMO_CHAT[ev.id] = DEMO_CHAT[ev.id] || [])
+    list.push({ id: Date.now(), name: name || 'Guest', body, kind, answered: false, created_at: new Date().toISOString() })
+    return 'ok'
+  }
+  const r = await supabase.rpc('post_chat', { p_event: ev.id, p_code: code || '', p_device: deviceId(), p_name: name || '', p_body: body, p_kind: kind || 'chat' })
+  return r.error ? 'error' : r.data
+}
+
+export async function reserveEvent(eventId, email) {
+  if (!supabase) return { ok: true }
+  const r = await supabase.from('virtual_reservations').insert({ event_id: eventId, email })
+  return r.error ? { ok: false } : { ok: true }
+}
+
+// Demo behavior mirrors the database rules closely enough to try the screens.
+function demoStart(ev, code) {
+  const now = Date.now()
+  if (ev.available_from && now < new Date(ev.available_from)) return { status: 'not_open', opens_at: ev.available_from }
+  if (ev.available_until && now > new Date(ev.available_until)) return { status: 'closed' }
+  if (ev.kind === 'live' && ev.starts_at && now < new Date(ev.starts_at) - 15 * 60000) return { status: 'not_started', starts_at: ev.starts_at }
+  if (ev.access === 'ticketed' && !(code && code.trim().toUpperCase() === 'DEMO-PASS')) return { status: 'code_required' }
+  const films = (ev.film_ids || []).map((id) => DEMO.films.find((m) => m.id === id)).filter(Boolean).map((m) => ({ ...m, video_url: m.video_url || DEMO_TRAILER }))
+  return {
+    status: 'ok', kind: ev.kind, title: ev.title, films, live_stream_url: ev.live_stream_url, preroll_url: ev.preroll_url, sponsor_name: ev.sponsor_name,
+    first_play_at: new Date().toISOString(), watch_until: ev.watch_hours ? new Date(now + ev.watch_hours * 3600e3).toISOString() : null,
+  }
 }
 
 // ---- paid access ----

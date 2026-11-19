@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { loadData, castVote, submitInquiry, unlockStream, storedCode, storeCode, startCheckout, claimAccess } from './data.js'
 import { buildChannels, nowOn, schedule, clock } from './channels.js'
+import { eventState, kindLabel } from './virtual.js'
 
 // Loaded on demand so the public home page stays light (video player, admin and owner console are separate chunks).
 const Admin = lazy(() => import('./Admin.jsx'))
@@ -8,6 +9,7 @@ const Network = lazy(() => import('./Network.jsx'))
 const Player = lazy(() => import('./Player.jsx'))
 const Theater = lazy(() => import('./Theater.jsx'))
 const ChannelPlayer = lazy(() => import('./ChannelPlayer.jsx'))
+const VirtualRoom = lazy(() => import('./VirtualRoom.jsx'))
 import { CONTACT_EMAIL, ROKU_URL } from './config.js'
 
 function useHashRoute() {
@@ -220,6 +222,7 @@ function Header({ go }) {
       <nav className="nav">
         <button onClick={() => go('festivals')}>Festivals</button>
         <button onClick={() => go('guide')}>TV guide</button>
+        <button onClick={() => go('virtual')}>Virtual</button>
         <button onClick={() => go('live')}>Live</button>
         <button onClick={() => go('devices')}>Watch</button>
         <button onClick={() => go('for-festivals')}>For festivals</button>
@@ -450,6 +453,41 @@ function useTick(ms) {
   useEffect(() => { const t = setInterval(() => set((x) => x + 1), ms); return () => clearInterval(t) }, [ms])
 }
 
+function EventCard({ ev, fest }) {
+  const st = eventState(ev)
+  return (
+    <a className="event" href={'#/virtual/' + ev.id}>
+      <div className="event-art" style={ev.poster_url ? { backgroundImage: 'url(' + ev.poster_url + ')' } : bg(fest && fest.brand_color)}>
+        <span className={'pill ' + (st.live ? 'live' : '')}>{st.live ? 'Live now' : kindLabel[ev.kind]}</span>
+      </div>
+      <div className="event-body">
+        <div className="event-title">{ev.title}</div>
+        {fest && <div className="event-meta">{fest.name}</div>}
+        <div className="event-when">{st.label}  |  {ev.access === 'ticketed' ? 'Ticketed' : 'Free'}</div>
+      </div>
+    </a>
+  )
+}
+
+// Upcoming and current virtual screenings, programs and live events (all festivals, or just one).
+function VirtualSection({ data, festivalId }) {
+  useTick(30000)
+  const rank = (e) => { const s = eventState(e); return s.live ? 0 : s.soon ? 1 : 2 }
+  const events = (data.events || [])
+    .filter((e) => (!festivalId || e.festival_id === festivalId) && !eventState(e).ended)
+    .sort((a, b) => rank(a) - rank(b) || new Date(a.starts_at || a.available_from || 0) - new Date(b.starts_at || b.available_from || 0))
+  if (!events.length) return null
+  return (
+    <section id="virtual" className="block">
+      <h2>Virtual cinema</h2>
+      <p className="note guide-note">Screenings, programs and live events you can watch from home.</p>
+      <div className="event-grid">
+        {events.map((e) => <EventCard key={e.id} ev={e} fest={data.festivals.find((f) => f.id === e.festival_id)} />)}
+      </div>
+    </section>
+  )
+}
+
 function ChannelRow({ ch, onChannel }) {
   const n = nowOn(ch)
   const pct = Math.min(100, (n.offset / n.item.duration) * 100)
@@ -488,6 +526,7 @@ function Hub({ data, go, onOpen, onChannel }) {
   return (
     <>
       <Hero go={go} stats={stats} festivals={data.festivals} />
+      <VirtualSection data={data} />
       <TvGuide data={data} onChannel={onChannel} />
       <LiveSection data={data} />
       <Featured data={data} onOpen={onOpen} />
@@ -642,7 +681,10 @@ function AccessClaim({ hash }) {
           <p className="ok">Payment received. Your access code:</p>
           <p className="code">{r.code}</p>
           <p className="note">Keep this code. It is already saved on this device, and you can enter it on any device to watch.</p>
-          {r.festivalSlug && <p><a className="btn" href={'#/festival/' + r.festivalSlug}>Go to the festival</a></p>}
+          <div className="actions">
+            {r.eventId && <a className="btn" href={'#/virtual/' + r.eventId}>Go to your screening</a>}
+            {r.festivalSlug && <a className={'btn' + (r.eventId ? ' ghost' : '')} href={'#/festival/' + r.festivalSlug}>Go to the festival</a>}
+          </div>
         </>
       )}
       {(r.status === 'timeout' || r.status === 'error') && <p className="error">We could not confirm your payment yet. If you were charged, contact the festival with your receipt.</p>}
@@ -674,8 +716,9 @@ function Festival({ data, slug, onOpen, onChannel }) {
   const fProducts = (data.products || []).filter((p) => p.festival_id === fest.id)
   const ticketedFilms = films.filter((m) => m.access === 'ticketed')
   const showPasses = fProducts.length > 0 || ticketedFilms.length > 0 || !!fest.passes_url
+  const hasEvents = (data.events || []).some((e) => e.festival_id === fest.id && !eventState(e).ended)
   const chan = buildChannels(data).find((c) => c.festivalId === fest.id)
-  const nav = [['about', 'About'], showPasses ? ['passes', 'Passes'] : null, chan ? ['channel', 'Channel'] : null, films.length ? ['selection', 'Films'] : null, feeds.length ? ['live', 'Live'] : null, sched.length ? ['schedule', 'Schedule'] : null, theaterShows.length ? ['theaters', 'In theaters'] : null].filter(Boolean)
+  const nav = [['about', 'About'], hasEvents ? ['virtual', 'Virtual'] : null, showPasses ? ['passes', 'Passes'] : null, chan ? ['channel', 'Channel'] : null, films.length ? ['selection', 'Films'] : null, feeds.length ? ['live', 'Live'] : null, sched.length ? ['schedule', 'Schedule'] : null, theaterShows.length ? ['theaters', 'In theaters'] : null].filter(Boolean)
   const meta = (m) => [m.year, m.runtime_min ? m.runtime_min + ' min' : null, m.genre, m.rating].filter(Boolean).join('  |  ')
 
   return (
@@ -728,6 +771,8 @@ function Festival({ data, slug, onOpen, onChannel }) {
           </div>
         </section>
       )}
+
+      {hasEvents && <VirtualSection data={data} festivalId={fest.id} />}
 
       {showPasses && <PassesSection fest={fest} products={fProducts} ticketed={ticketedFilms} />}
 
@@ -858,7 +903,8 @@ export default function App() {
   const isNetwork = hash.startsWith('#/network')
   const isTheater = hash.startsWith('#/theater')
   const isAccess = hash.startsWith('#/access')
-  const isPublic = !isAdmin && !isNetwork && !isTheater && !isAccess
+  const isVirtual = hash.startsWith('#/virtual/')
+  const isPublic = !isAdmin && !isNetwork && !isTheater && !isAccess && !isVirtual
 
   const go = (id) => {
     const scroll = () => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }) }
@@ -879,12 +925,15 @@ export default function App() {
           {isTheater && <Theater slug={decodeURIComponent(hash.replace('#/theater/', ''))} />}
         </Suspense>
         {isAccess && <AccessClaim hash={hash} />}
+        {isVirtual && !data && !error && <p className="note pad">Loading...</p>}
+        {isVirtual && error && <p className="note pad">{error}</p>}
+        {isVirtual && data && <Suspense fallback={<p className="note pad">Loading...</p>}><VirtualRoom key={hash} eventId={hash.replace('#/virtual/', '')} data={data} /></Suspense>}
         {isPublic && error && <p className="note pad">{error}</p>}
         {isPublic && !data && !error && <p className="note pad">Loading...</p>}
         {isPublic && data && data.demo && <p className="banner">Demo content. Connect Supabase to show real festivals.</p>}
         {isPublic && data && (m ? <Festival data={data} slug={m[1]} onOpen={openFilm} onChannel={setChannel} /> : <Hub data={data} go={go} onOpen={openFilm} onChannel={setChannel} />)}
       </main>
-      {(isPublic || isAccess) && <Footer />}
+      {(isPublic || isAccess || isVirtual) && <Footer />}
       {channel && data && <Suspense fallback={null}><ChannelPlayer channelId={channel} data={data} onClose={() => setChannel(null)} /></Suspense>}
       {open && <FilmModal key={open.id + openMode} film={open} festival={openFest} startMode={openMode} products={data ? data.products : []} onClose={() => setOpen(null)} />}
     </div>

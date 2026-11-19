@@ -63,3 +63,9 @@ unique-viewer de-duplication across devices.
 The Roku app records watch time (seconds, film or live feed, festival, device id from GetChannelClientId, source "roku")
 to view_events through ViewLogTask. Appears in festival analytics and the network dashboard. Untested on a device.
 Not built: ad impressions from Roku (needs the RAF ad task), de-duplicating devices across platforms.
+
+## Virtual cinema (2026-11-19)
+New admin tab and public screening room: screenings, programs, live events; availability and watch windows; capacity;
+region rules (server-checked); sponsor pre-roll; chat and Q&A with moderation; email reservations; tickets and codes
+can cover an event. See docs/virtual-cinema.md. Migration 009_virtual.sql. Not included: DRM and forensic watermarking,
+reminder emails, TV apps for events.

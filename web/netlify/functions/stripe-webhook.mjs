@@ -34,6 +34,7 @@ export default async (req) => {
       festival_id: product.festival_id,
       product_id: product.id,
       film_id: product.film_id || null,
+      event_id: product.event_id || null,
       code: makeCode(),
       email: (s.customer_details && s.customer_details.email) || null,
       source: 'stripe',

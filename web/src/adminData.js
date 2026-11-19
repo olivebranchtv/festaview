@@ -378,22 +378,71 @@ export async function revokeEntitlement(id) {
   const r = await supabase.from('entitlements').update({ status: 'revoked' }).eq('id', id)
   if (r.error) throw r.error
 }
-export async function createCompCodes(fid, count, filmId, note, expiresAt) {
+export async function createCompCodes(fid, count, filmId, note, expiresAt, eventId, overridesGeo) {
   if (isDemo) {
     const s = load(); s.entitlements = s.entitlements || []
     const codes = []
     for (let i = 0; i < count; i++) {
       const code = 'FV-' + Math.random().toString(16).slice(2, 6).toUpperCase() + '-' + Math.random().toString(16).slice(2, 6).toUpperCase() + '-' + Math.random().toString(16).slice(2, 6).toUpperCase()
-      s.entitlements.unshift({ id: uid(), festival_id: fid, film_id: filmId || null, code, note, source: 'comp', status: 'active', amount_cents: 0, fee_cents: 0, created_at: new Date().toISOString() })
+      s.entitlements.unshift({ id: uid(), festival_id: fid, film_id: filmId || null, event_id: eventId || null, overrides_geo: !!overridesGeo, code, note, source: 'comp', status: 'active', amount_cents: 0, fee_cents: 0, created_at: new Date().toISOString() })
       codes.push(code)
     }
     persist(s); return codes
   }
-  const r = await supabase.rpc('create_comp_codes', { p_festival: fid, p_count: count, p_film: filmId || null, p_note: note || null, p_expires: expiresAt || null })
+  const r = await supabase.rpc('create_comp_codes', { p_festival: fid, p_count: count, p_film: filmId || null, p_note: note || null, p_expires: expiresAt || null, p_event: eventId || null, p_overrides_geo: !!overridesGeo })
   if (r.error) throw r.error
   return r.data || []
 }
 export async function setFestivalPayments(id, enabled, feePct) {
   const r = await supabase.from('festivals').update({ payments_enabled: enabled, ticket_fee_pct: feePct }).eq('id', id)
+  if (r.error) throw r.error
+}
+
+// ---- virtual cinema ----
+export async function listEvents(fid) {
+  if (isDemo) return load().events || []
+  const r = await supabase.from('virtual_events').select('*').eq('festival_id', fid).order('created_at', { ascending: false })
+  if (r.error) throw r.error
+  return r.data
+}
+export async function saveEvent(fid, ev) {
+  if (isDemo) {
+    const s = load(); s.events = s.events || []
+    if (ev.id) s.events = s.events.map((x) => (x.id === ev.id ? { ...x, ...ev } : x))
+    else s.events.unshift({ ...ev, id: uid(), festival_id: fid })
+    persist(s); return
+  }
+  const { id, ...rest } = ev
+  const row = clean(rest)
+  const r = id ? await supabase.from('virtual_events').update(row).eq('id', id) : await supabase.from('virtual_events').insert({ ...row, festival_id: fid })
+  if (r.error) throw r.error
+}
+export async function deleteEvent(id) {
+  if (isDemo) { const s = load(); s.events = (s.events || []).filter((x) => x.id !== id); persist(s); return }
+  const r = await supabase.from('virtual_events').delete().eq('id', id)
+  if (r.error) throw r.error
+}
+export async function eventSessionCounts(ids) {
+  if (isDemo || !ids.length) return {}
+  const r = await supabase.from('virtual_sessions').select('event_id').in('event_id', ids)
+  if (r.error) throw r.error
+  const out = {}
+  for (const x of r.data || []) out[x.event_id] = (out[x.event_id] || 0) + 1
+  return out
+}
+export async function listReservations(eventId) {
+  if (isDemo) return []
+  const r = await supabase.from('virtual_reservations').select('email,created_at').eq('event_id', eventId).order('created_at')
+  if (r.error) throw r.error
+  return r.data
+}
+export async function listChatAdmin(eventId) {
+  if (isDemo) return []
+  const r = await supabase.from('chat_messages').select('*').eq('event_id', eventId).order('id', { ascending: false }).limit(200)
+  if (r.error) throw r.error
+  return r.data
+}
+export async function moderateChat(id, patch) {
+  const r = await supabase.from('chat_messages').update(patch).eq('id', id)
   if (r.error) throw r.error
 }
