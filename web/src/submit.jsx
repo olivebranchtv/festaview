@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getSession, onAuth, signIn, signUp, signOut } from './adminData.js'
 import { claimAccess } from './data.js'
-import { loadSubmissionBoard, getQuote, createSubmission, updateSubmission, withdrawSubmission, listMySubmissions, payForSubmission, getProfile, saveProfile } from './submissions.js'
+import { loadSubmissionBoard, getQuote, createSubmission, updateSubmission, withdrawSubmission, listMySubmissions, payForSubmission, getProfile, saveProfile, uploadSubmissionFile, removeSubmissionFile } from './submissions.js'
 import { money, fmtDate, submissionState, STATUS_LABEL, PAY_LABEL } from './submissionRules.js'
 import { submitPath, festivalPath } from './paths.js'
 import { navigate } from './router.js'
@@ -119,30 +119,128 @@ export function SubmitIndexPage() {
   )
 }
 
-const EMPTY = { title: '', director: '', runtime_min: '', year: '', synopsis: '', screener_url: '', screener_password: '', poster_url: '', country: '', language: '', genre: '' }
+const EMPTY = {
+  title: '', director: '', runtime_min: '', year: '', synopsis: '', logline: '', screener_url: '', screener_password: '', poster_url: '', country: '', language: '', genre: '',
+  producer: '', writer: '', cinematographer: '', editor: '', composer: '', cast: '', production_company: '',
+  shooting_format: '', aspect_ratio: '', color: '', premiere_status: '', student: false, first_time: false, previous_festivals: '', awards: '',
+  subtitles: false, trailer_url: '', director_bio: '', director_statement: '', website: '', imdb_url: '', social: '', phone: '', rights_confirmed: false, files: [],
+}
+const fmtSize = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB')
+
+// Uploads one or more files of a kind into the entry. The list of uploaded files lives in f.files.
+function FileBox({ label, hint, kind, accept, multiple, f, set }) {
+  const [pct, setPct] = useState(null)
+  const [err, setErr] = useState('')
+  const mine = (f.files || []).filter((x) => x.kind === kind)
+  const add = async (e) => {
+    const list = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!list.length) return
+    setErr('')
+    let next = multiple ? [...(f.files || [])] : (f.files || []).filter((x) => x.kind !== kind)
+    for (const file of list) {
+      try {
+        setPct(0)
+        const up = await uploadSubmissionFile(file, kind, setPct)
+        next = [...next, up]
+        set('files', next)
+      } catch (x) { setErr(x.message); break }
+    }
+    setPct(null)
+  }
+  const remove = async (x) => {
+    set('files', (f.files || []).filter((y) => y.path !== x.path))
+    removeSubmissionFile(x.path).catch(() => {})
+  }
+  return (
+    <div className="field">
+      <span>{label}</span>
+      {mine.map((x) => <p className="note" key={x.path}>{x.name} ({fmtSize(x.size)}) <button type="button" className="btn ghost small" onClick={() => remove(x)}>Remove</button></p>)}
+      {(multiple || mine.length === 0) && pct === null && <input type="file" accept={accept} multiple={multiple} onChange={add} />}
+      {pct !== null && <progress value={pct} max="100" aria-label="Upload progress">{pct}%</progress>}
+      {pct !== null && <small>Uploading {pct}%. Keep this page open until it finishes.</small>}
+      {hint && <small>{hint}</small>}
+      {err && <small className="error">{err}</small>}
+    </div>
+  )
+}
 
 function EntryFields({ f, set }) {
   const bind = (k) => ({ value: f[k] || '', onChange: (e) => set(k, e.target.value) })
+  const tick = (k) => ({ checked: !!f[k], onChange: (e) => set(k, e.target.checked) })
   return (
     <>
+      <h3>About the film</h3>
       <Field label="Film title"><input {...bind('title')} maxLength={200} required /></Field>
-      <Field label="Director"><input {...bind('director')} maxLength={200} required /></Field>
+      <Field label="Director (or directors)"><input {...bind('director')} maxLength={200} required /></Field>
       <div className="two">
         <Field label="Running time (minutes)"><input type="number" min="1" max="1000" {...bind('runtime_min')} required /></Field>
         <Field label="Year completed"><input type="number" min="1890" max="2100" {...bind('year')} /></Field>
       </div>
+      <Field label="Logline" hint="One sentence that sells the film."><input {...bind('logline')} maxLength={300} /></Field>
       <Field label="Synopsis" hint="A few sentences about the film."><textarea rows={4} {...bind('synopsis')} required /></Field>
-      <Field label="Screener link" hint="A Vimeo, YouTube or other private link the festival can watch. It must stay live through the decision date."><input type="url" placeholder="https://" {...bind('screener_url')} required /></Field>
-      <Field label="Screener password (if any)"><input {...bind('screener_password')} maxLength={100} autoComplete="off" /></Field>
-      <Field label="Poster image link (optional)"><input type="url" placeholder="https://" {...bind('poster_url')} /></Field>
       <div className="two">
-        <Field label="Country"><input {...bind('country')} maxLength={80} /></Field>
+        <Field label="Country of production"><input {...bind('country')} maxLength={80} /></Field>
         <Field label="Language"><input {...bind('language')} maxLength={80} /></Field>
       </div>
-      <Field label="Genre"><input {...bind('genre')} maxLength={80} /></Field>
+      <div className="two">
+        <Field label="Genre"><input {...bind('genre')} maxLength={80} /></Field>
+        <Field label="Production company"><input {...bind('production_company')} maxLength={200} /></Field>
+      </div>
+
+      <h3>Your film</h3>
+      <FileBox label="Upload your film" kind="film" accept="video/*,.mkv,.mov,.mp4" f={f} set={set} hint="MP4 or MOV is best. Large films can take a while to upload. If your file is too large, use a private screener link below instead." />
+      <Field label="Or a screener link" hint="A Vimeo, YouTube or other private link the festival can watch. It must stay live through the decision date. Needed if you do not upload the film."><input type="url" placeholder="https://" {...bind('screener_url')} /></Field>
+      <Field label="Screener password (if any)"><input {...bind('screener_password')} maxLength={100} autoComplete="off" /></Field>
+      <Field label="Trailer link (optional)"><input type="url" placeholder="https://" {...bind('trailer_url')} /></Field>
+      <FileBox label="Subtitles (.srt or .vtt, optional)" kind="subtitles" accept=".srt,.vtt,.txt" f={f} set={set} />
+      <label className="check"><input type="checkbox" {...tick('subtitles')} /> The film has English subtitles</label>
+
+      <h3>Artwork</h3>
+      <FileBox label="Poster" kind="poster" accept="image/*" f={f} set={set} />
+      <Field label="Poster link (optional, if it is online)"><input type="url" placeholder="https://" {...bind('poster_url')} /></Field>
+      <FileBox label="Film stills" kind="still" accept="image/*" multiple f={f} set={set} hint="Add a few frames from the film for the festival's program." />
+
+      <h3>Cast and crew</h3>
+      <div className="two">
+        <Field label="Producer"><input {...bind('producer')} maxLength={300} /></Field>
+        <Field label="Writer"><input {...bind('writer')} maxLength={300} /></Field>
+        <Field label="Cinematographer"><input {...bind('cinematographer')} maxLength={300} /></Field>
+        <Field label="Editor"><input {...bind('editor')} maxLength={300} /></Field>
+        <Field label="Composer"><input {...bind('composer')} maxLength={300} /></Field>
+      </div>
+      <Field label="Main cast"><textarea rows={2} {...bind('cast')} /></Field>
+
+      <h3>Technical and background</h3>
+      <div className="two">
+        <Field label="Shot on (camera or format)"><input {...bind('shooting_format')} maxLength={200} /></Field>
+        <Field label="Aspect ratio"><input {...bind('aspect_ratio')} placeholder="16:9" maxLength={40} /></Field>
+        <Field label="Color"><select {...bind('color')}><option value="">Choose</option><option value="color">Color</option><option value="bw">Black and white</option><option value="both">Both</option></select></Field>
+        <Field label="Premiere status"><select {...bind('premiere_status')}><option value="">Choose</option><option value="world">World premiere</option><option value="international">International premiere</option><option value="national">National premiere</option><option value="regional">Regional premiere</option><option value="none">Has played elsewhere</option></select></Field>
+      </div>
+      <label className="check"><input type="checkbox" {...tick('student')} /> Student film</label>
+      <label className="check"><input type="checkbox" {...tick('first_time')} /> First-time filmmaker</label>
+      <Field label="Festivals this film has played at (optional)"><textarea rows={2} {...bind('previous_festivals')} /></Field>
+      <Field label="Awards (optional)"><textarea rows={2} {...bind('awards')} /></Field>
+
+      <h3>About the filmmaker</h3>
+      <Field label="Director biography"><textarea rows={3} {...bind('director_bio')} /></Field>
+      <Field label="Director's statement (optional)"><textarea rows={3} {...bind('director_statement')} /></Field>
+      <div className="two">
+        <Field label="Website (optional)"><input type="url" placeholder="https://" {...bind('website')} /></Field>
+        <Field label="IMDb page (optional)"><input type="url" placeholder="https://" {...bind('imdb_url')} /></Field>
+        <Field label="Instagram or other social (optional)"><input {...bind('social')} maxLength={300} /></Field>
+        <Field label="Phone (optional, for the festival only)"><input {...bind('phone')} maxLength={60} /></Field>
+      </div>
+      <FileBox label="Script (optional)" kind="script" accept=".pdf,.doc,.docx,.txt" f={f} set={set} />
+      <FileBox label="Press kit or other documents (optional)" kind="presskit" accept=".pdf,.doc,.docx,.zip,image/*" multiple f={f} set={set} />
+
+      <label className="check"><input type="checkbox" {...tick('rights_confirmed')} required /> I confirm I hold the rights to submit this film, and that the information above is true.</label>
     </>
   )
 }
+
+const needsScreener = (f) => !String(f.screener_url || '').trim() && !(f.files || []).some((x) => x.kind === 'film')
 
 // ---------------------------------------------------------------- /festival/<slug>/submit
 export function FestivalSubmitPage({ slug }) {
@@ -180,6 +278,7 @@ export function FestivalSubmitPage({ slug }) {
     e.preventDefault()
     setErr('')
     if (!cat) { setErr('Choose a category.'); return }
+    if (needsScreener(f)) { setErr('Upload your film or enter a screener link.'); return }
     setBusy(true)
     try {
       const created = await createSubmission(fest.id, catId, f, code, board)
@@ -262,6 +361,7 @@ function MyEntry({ s, names, refresh, setMsg }) {
   }
   const save = async (e) => {
     e.preventDefault()
+    if (needsScreener(edit)) { setMsg('Upload your film or enter a screener link.', true); return }
     try { await updateSubmission(s.id, edit); setEdit(null); setMsg('Entry updated.'); refresh() } catch (x) { setMsg(x.message, true) }
   }
   const withdraw = async () => {
@@ -291,7 +391,7 @@ function MyEntry({ s, names, refresh, setMsg }) {
         </form>
       ) : (
         <div className="actions">
-          {s.status === 'submitted' && <button className="btn ghost" type="button" onClick={() => setEdit({ ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, s[k] == null ? '' : s[k]])) })}>Edit details</button>}
+          {s.status === 'submitted' && <button className="btn ghost" type="button" onClick={() => setEdit({ ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, s[k] == null ? EMPTY[k] : s[k]])), ...(s.details || {}), screener_url: s.screener_url === 'uploaded' ? '' : s.screener_url || '', files: s.files || [] })}>Edit details</button>}
           {(s.status === 'submitted' || s.status === 'under_review') && <button className="btn ghost danger" type="button" onClick={withdraw}>Withdraw</button>}
         </div>
       )}

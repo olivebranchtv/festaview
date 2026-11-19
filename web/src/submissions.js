@@ -65,6 +65,55 @@ export async function saveProfile(p) {
   if (r.error) throw new Error(r.error.message)
 }
 
+// Extra details a festival asks for, kept with the entry. Files (film, poster, stills, subtitles) live in private storage.
+export const DETAIL_TEXT = ['logline', 'director_bio', 'director_statement', 'producer', 'writer', 'cinematographer', 'editor', 'composer', 'cast', 'production_company',
+  'shooting_format', 'aspect_ratio', 'color', 'premiere_status', 'trailer_url', 'website', 'imdb_url', 'social', 'previous_festivals', 'awards', 'phone']
+export const DETAIL_BOOL = ['student', 'first_time', 'subtitles', 'rights_confirmed']
+export const pickDetails = (f) => Object.fromEntries([...DETAIL_TEXT.map((k) => [k, f[k] || '']), ...DETAIL_BOOL.map((k) => [k, !!f[k]])])
+const hasFilm = (f) => (f.files || []).some((x) => x.kind === 'film')
+const screenerOf = (f) => (String(f.screener_url || '').trim() || (hasFilm(f) ? 'uploaded' : ''))
+
+export async function uploadSubmissionFile(file, kind, onProgress) {
+  if (!supabase) return { kind, path: 'demo/' + file.name, name: file.name, size: file.size }
+  const { data } = await supabase.auth.getSession()
+  const sess = data && data.session
+  if (!sess) throw new Error('Please sign in first.')
+  const path = sess.user.id + '/' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())) + '/' + kind + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const url = import.meta.env.VITE_SUPABASE_URL + '/storage/v1/object/submission-files/' + path.split('/').map(encodeURIComponent).join('/')
+  await new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest()
+    x.open('POST', url)
+    x.setRequestHeader('apikey', import.meta.env.VITE_SUPABASE_ANON_KEY)
+    x.setRequestHeader('Authorization', 'Bearer ' + sess.access_token)
+    x.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+    x.setRequestHeader('x-upsert', 'false')
+    x.upload.onprogress = (e) => { if (onProgress && e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)) }
+    x.onerror = () => reject(new Error('The upload was interrupted. Check your connection and try again.'))
+    x.onload = () => {
+      if (x.status >= 200 && x.status < 300) return resolve()
+      let m = ''
+      try { m = JSON.parse(x.responseText).message || '' } catch { /* not json */ }
+      reject(new Error(x.status === 413 ? 'That file is larger than the upload limit.' : m || 'The upload failed (' + x.status + ').'))
+    }
+    x.send(file)
+  })
+  return { kind, path, name: file.name, size: file.size }
+}
+export async function removeSubmissionFile(path) {
+  if (!supabase || path.startsWith('demo/')) return
+  await supabase.storage.from('submission-files').remove([path])
+}
+export async function submissionFileUrl(path) {
+  if (!supabase) return null
+  const r = await supabase.storage.from('submission-files').createSignedUrl(path, 3600)
+  return r.error ? null : r.data.signedUrl
+}
+async function saveDetails(id, f) {
+  if (!supabase) return
+  const r = await supabase.rpc('save_submission_details', { p_id: id, p_details: pickDetails(f), p_files: f.files || [] })
+  if (r.error) throw new Error(r.error.message)
+}
+
 const num = (v) => (v === '' || v == null ? null : parseInt(v, 10) || null)
 
 export async function createSubmission(festivalId, categoryId, f, code, board) {
@@ -73,25 +122,27 @@ export async function createSubmission(festivalId, categoryId, f, code, board) {
     const cat = board.categories.find((c) => c.id === categoryId)
     if (cat && cat.max_runtime_min && num(f.runtime_min) > cat.max_runtime_min) throw new Error('This category accepts films up to ' + cat.max_runtime_min + ' minutes.')
     const l = demoStore()
-    const row = { id: 'ds' + Date.now(), festival_id: festivalId, category_id: categoryId, title: f.title, director: f.director, runtime_min: num(f.runtime_min), year: num(f.year), synopsis: f.synopsis, screener_url: f.screener_url, poster_url: f.poster_url, country: f.country, status: 'submitted', payment_status: q.amount_cents > 0 ? 'unpaid' : 'free', amount_due_cents: q.amount_cents, tier_name: q.tier_name, created_at: new Date().toISOString() }
+    const row = { id: 'ds' + Date.now(), festival_id: festivalId, category_id: categoryId, title: f.title, director: f.director, runtime_min: num(f.runtime_min), year: num(f.year), synopsis: f.synopsis, screener_url: screenerOf(f), poster_url: f.poster_url, country: f.country, details: pickDetails(f), files: f.files || [], status: 'submitted', payment_status: q.amount_cents > 0 ? 'unpaid' : 'free', amount_due_cents: q.amount_cents, tier_name: q.tier_name, created_at: new Date().toISOString() }
     l.unshift(row); demoSave(l)
     return { id: row.id, payment_status: row.payment_status, amount_cents: q.amount_cents }
   }
   const r = await supabase.rpc('create_submission', {
     p_festival: festivalId, p_category: categoryId, p_title: f.title, p_director: f.director, p_runtime: num(f.runtime_min), p_year: num(f.year), p_synopsis: f.synopsis,
-    p_screener: f.screener_url, p_screener_password: f.screener_password || null, p_poster: f.poster_url || null, p_country: f.country || null, p_language: f.language || null, p_genre: f.genre || null, p_code: code || null,
+    p_screener: screenerOf(f), p_screener_password: f.screener_password || null, p_poster: f.poster_url || null, p_country: f.country || null, p_language: f.language || null, p_genre: f.genre || null, p_code: code || null,
   })
   if (r.error) throw new Error(r.error.message)
+  try { await saveDetails(r.data.id, f) } catch (e) { throw new Error('Your entry was saved, but the details could not be: ' + e.message + ' Open My submissions to finish it.') }
   return r.data
 }
 
 export async function updateSubmission(id, f) {
-  if (!supabase) { demoSave(demoStore().map((x) => (x.id === id ? { ...x, ...f, runtime_min: num(f.runtime_min), year: num(f.year) } : x))); return }
+  if (!supabase) { demoSave(demoStore().map((x) => (x.id === id ? { ...x, ...f, screener_url: screenerOf(f), details: pickDetails(f), files: f.files || [], runtime_min: num(f.runtime_min), year: num(f.year) } : x))); return }
   const r = await supabase.rpc('update_my_submission', {
     p_id: id, p_title: f.title, p_director: f.director, p_runtime: num(f.runtime_min), p_year: num(f.year), p_synopsis: f.synopsis,
-    p_screener: f.screener_url, p_screener_password: f.screener_password || null, p_poster: f.poster_url || null, p_country: f.country || null, p_language: f.language || null, p_genre: f.genre || null,
+    p_screener: screenerOf(f), p_screener_password: f.screener_password || null, p_poster: f.poster_url || null, p_country: f.country || null, p_language: f.language || null, p_genre: f.genre || null,
   })
   if (r.error) throw new Error(r.error.message)
+  await saveDetails(id, f)
 }
 
 export async function withdrawSubmission(id) {

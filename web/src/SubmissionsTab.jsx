@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from './adminData.js'
 import { csvText } from './submissionRules.js'
+import { submissionFileUrl } from './submissions.js'
 
 // Festival admin: filmmaker submissions (settings, categories and fee steps, waiver codes, entries).
 const dateOnly = (iso) => (iso ? String(iso).slice(0, 10) : '')
@@ -19,6 +20,32 @@ function Field({ label, hint, children }) {
       {children}
       {hint && <small>{hint}</small>}
     </label>
+  )
+}
+
+const DETAIL_LABELS = [['logline', 'Logline'], ['production_company', 'Production company'], ['producer', 'Producer'], ['writer', 'Writer'], ['cinematographer', 'Cinematographer'], ['editor', 'Editor'], ['composer', 'Composer'], ['cast', 'Cast'],
+  ['shooting_format', 'Shot on'], ['aspect_ratio', 'Aspect ratio'], ['color', 'Color'], ['premiere_status', 'Premiere status'], ['previous_festivals', 'Played at'], ['awards', 'Awards'],
+  ['director_bio', 'Director bio'], ['director_statement', 'Director statement'], ['trailer_url', 'Trailer'], ['website', 'Website'], ['imdb_url', 'IMDb'], ['social', 'Social'], ['phone', 'Phone']]
+const FILE_KIND = { film: 'Film', poster: 'Poster', still: 'Still', subtitles: 'Subtitles', script: 'Script', presskit: 'Press kit', other: 'File' }
+
+// Everything the filmmaker filled in, with private file downloads (links last an hour).
+function EntryDetails({ s, setMsg }) {
+  const d = s.details || {}
+  const open = async (f) => {
+    const u = await submissionFileUrl(f.path)
+    if (u) window.open(u, '_blank', 'noopener'); else setMsg('Could not open that file.', true)
+  }
+  const flags = [d.student && 'Student film', d.first_time && 'First-time filmmaker', d.subtitles && 'English subtitles'].filter(Boolean)
+  return (
+    <div className="note small">
+      <dl>
+        {DETAIL_LABELS.filter(([k]) => d[k]).map(([k, l]) => <div key={k}><dt><strong>{l}</strong></dt><dd>{d[k]}</dd></div>)}
+      </dl>
+      {flags.length > 0 && <p>{flags.join(' | ')}</p>}
+      {(s.files || []).length > 0 && (
+        <p>{s.files.map((f) => <button key={f.path} type="button" className="btn ghost small" onClick={() => open(f)}>{(FILE_KIND[f.kind] || 'File') + ': ' + f.name}</button>)}</p>
+      )}
+    </div>
   )
 }
 
@@ -93,8 +120,8 @@ export default function SubmissionsTab({ festival, setMsg }) {
   const shown = d.submissions.filter((s) => (!fStatus || s.status === fStatus) && (!fCat || s.category_id === fCat) &&
     (!q || (s.title + ' ' + s.director + ' ' + (s.country || '')).toLowerCase().includes(q.toLowerCase())))
   const exportCsv = () => downloadCsv('submissions-' + festival.slug + '.csv', [
-    ['Title', 'Director', 'Category', 'Fee step', 'Runtime (min)', 'Year', 'Country', 'Language', 'Genre', 'Status', 'Payment', 'Paid ($)', 'Contact email', 'Screener link', 'Screener password', 'Synopsis', 'Submitted', 'Note'],
-    ...shown.map((s) => [s.title, s.director, catName(s.category_id), s.tier_name, s.runtime_min, s.year, s.country, s.language, s.genre, SUB_STATUS[s.status], s.payment_status, dollars(s.amount_paid_cents), s.contact_email, s.screener_url, s.screener_password, s.synopsis, String(s.created_at || '').slice(0, 10), s.admin_note]),
+    ['Title', 'Director', 'Category', 'Fee step', 'Runtime (min)', 'Year', 'Country', 'Language', 'Genre', 'Status', 'Payment', 'Paid ($)', 'Contact email', 'Screener link', 'Screener password', 'Uploaded files', 'Logline', 'Producer', 'Writer', 'Cinematographer', 'Cast', 'Premiere status', 'Trailer', 'Website', 'Director bio', 'Synopsis', 'Submitted', 'Note'],
+    ...shown.map((s) => [s.title, s.director, catName(s.category_id), s.tier_name, s.runtime_min, s.year, s.country, s.language, s.genre, SUB_STATUS[s.status], s.payment_status, dollars(s.amount_paid_cents), s.contact_email, s.screener_url, s.screener_password, (s.files || []).length, (s.details || {}).logline, (s.details || {}).producer, (s.details || {}).writer, (s.details || {}).cinematographer, (s.details || {}).cast, (s.details || {}).premiere_status, (s.details || {}).trailer_url, (s.details || {}).website, (s.details || {}).director_bio, s.synopsis, String(s.created_at || '').slice(0, 10), s.admin_note]),
   ])
   const anyFee = d.tiers.some((t) => t.fee_cents > 0)
 
@@ -103,6 +130,7 @@ export default function SubmissionsTab({ festival, setMsg }) {
       <form className="panel" onSubmit={saveSettings}>
         <h2>Submission settings</h2>
         <p className="note">Filmmakers enter from <a href={'/festival/' + festival.slug + '/submit'}>/festival/{festival.slug}/submit</a>. Your festival must be published.</p>
+        {(!set.open || d.categories.length === 0) && <p className="banner">Filmmakers cannot enter yet. To open your festival for entries: 1) add at least one category with a fee below, 2) tick Accept submissions, 3) Save settings.</p>}
         <label className="check"><input type="checkbox" checked={set.open} onChange={(e) => setSet({ ...set, open: e.target.checked })} /> Accept submissions</label>
         <div className="two">
           <Field label="Opens (optional)"><input type="date" value={set.opens} onChange={(e) => setSet({ ...set, opens: e.target.value })} /></Field>
@@ -206,11 +234,13 @@ export default function SubmissionsTab({ festival, setMsg }) {
             <tbody>
               {shown.map((s) => (
                 <tr key={s.id}>
-                  <td><strong>{s.title}</strong><br /><span className="note small">{s.director} | {s.runtime_min} min{s.year ? ' | ' + s.year : ''}{s.country ? ' | ' + s.country : ''}</span></td>
+                  <td><strong>{s.title}</strong><br /><span className="note small">{s.director} | {s.runtime_min} min{s.year ? ' | ' + s.year : ''}{s.country ? ' | ' + s.country : ''}</span>
+                    {(s.details && Object.keys(s.details).length > 0 || (s.files || []).length > 0) && <details><summary className="note small">Full entry details</summary><EntryDetails s={s} setMsg={setMsg} /></details>}</td>
                   <td>{catName(s.category_id)}<br /><span className="note small">{s.tier_name || ''} {s.payment_status === 'paid' ? '$' + dollars(s.amount_paid_cents) : s.payment_status}</span></td>
                   <td><span className={'pill ' + (s.status === 'accepted' ? 'published' : 'draft')}>{SUB_STATUS[s.status]}</span></td>
                   <td>
-                    <a className="btn ghost" href={s.screener_url} target="_blank" rel="noreferrer noopener">Watch screener</a>
+                    {s.screener_url && s.screener_url !== 'uploaded' && <a className="btn ghost" href={s.screener_url} target="_blank" rel="noreferrer noopener">Watch screener</a>}
+                    {(s.files || []).filter((f) => f.kind === 'film').map((f) => <button key={f.path} type="button" className="btn ghost" onClick={async () => { const u = await submissionFileUrl(f.path); if (u) window.open(u, '_blank', 'noopener'); else setMsg('Could not open the film.', true) }}>Watch uploaded film</button>)}
                     {s.screener_password && <span className="note small"> Password: {s.screener_password}</span>}
                   </td>
                   <td>
