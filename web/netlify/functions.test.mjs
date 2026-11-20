@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { preshowWhere, reelSeconds, adLabel, PHONE_SEC } from '../src/preshow.js'
 import { currentTier, submissionState, csvText, money as feeMoney } from '../src/submissionRules.js'
+import { validateRubric, weightedTotal, plainAverage, isComplete, summarize, validScore, DEFAULT_RUBRIC } from '../src/judging.js'
 import { verifyStripeSignature, makeCode, feeCents, checkoutParams, ticketCheckoutParams, submissionCheckoutParams } from './lib/pay.mjs'
 import checkout from './functions/checkout.mjs'
 import webhook from './functions/stripe-webhook.mjs'

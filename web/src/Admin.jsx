@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import * as api from './adminData.js'
 import SubmissionsTab from './SubmissionsTab.jsx'
+import JudgingTab from './JudgingTab.jsx'
 import Preshow from './Preshow.jsx'
 import ShowingEdit from './ShowingEdit.jsx'
 
@@ -1426,12 +1427,13 @@ export default function Admin() {
           )}
           {current.status === 'draft' && <GettingStarted festival={current} goTab={setTab} />}
           <nav className="tabs">
-            {[['films', 'Films'], ['submissions', 'Submissions'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['cinema', 'Festaview Cinemas'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
+            {[['films', 'Films'], ['submissions', 'Submissions'], ['judging', 'Judging'], ['live', 'Live channels'], ['screenings', 'Theaters'], ['virtual', 'Virtual cinema'], ['cinema', 'Festaview Cinemas'], ['access', 'Access and sales'], ['analytics', 'Analytics'], ['festival', 'Festival page']].map(([k, label]) => (
               <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsgState(null) }}>{label}</button>
             ))}
           </nav>
           {tab === 'films' && <FilmsTab festival={current} setMsg={setMsg} />}
           {tab === 'submissions' && <SubmissionsTab festival={current} setMsg={setMsg} onFestival={(patch) => { const next = { ...current, ...patch }; setCurrent(next); setFestivals((l) => l.map((f) => (f.id === next.id ? next : f))) }} />}
+          {tab === 'judging' && <JudgingTab festival={current} setMsg={setMsg} />}
           {tab === 'live' && <LiveTab festival={current} setMsg={setMsg} />}
           {tab === 'screenings' && <ScreeningsTab festival={current} setMsg={setMsg} />}
           {tab === 'virtual' && <VirtualTab festival={current} setMsg={setMsg} />}

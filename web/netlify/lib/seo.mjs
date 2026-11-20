@@ -362,7 +362,7 @@ export function pageSeo(pathname, data, origin) {
       seo.body = shell(crumbs(items) + '<h1>About ' + esc(SITE_NAME) + '</h1><p>' + esc(SITE_DESCRIPTION) + '</p>' + list(['Watch official selections from film festivals, on demand.', 'Join live premieres, virtual screenings and Q&amp;As.', 'Tune in to festival channels that play on a schedule.', 'Watch on Roku or any web browser.']))
       return seo
     }
-    default: // admin, network, access, theater, filmmaker: private, never indexed
+    default: // admin, network, access, theater, filmmaker, judge: private, never indexed
       seo.title = 'Festaview'
       seo.robots = 'noindex,nofollow'
       seo.canonical = SITE_URL + '/'

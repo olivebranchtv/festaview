@@ -64,7 +64,7 @@ export function matchRoute(pathname) {
     case 'for-festivals': return seg.length === 1 ? { name: 'forFestivals' } : null
     case 'watch-on-tv': return seg.length === 1 ? { name: 'watchOnTv' } : null
     case 'about': return seg.length === 1 ? { name: 'about' } : null
-    case 'admin': case 'network': case 'access': case 'filmmaker': return { name: a, private: true }
+    case 'admin': case 'network': case 'access': case 'filmmaker': case 'judge': return { name: a, private: true }
     case 'theater': return { name: 'theater', slug: b, private: true }
     default: return null
   }

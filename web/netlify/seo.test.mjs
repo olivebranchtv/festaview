@@ -98,7 +98,7 @@ for (const p of ['/festival/does-not-exist', '/film/zzz/nothing', '/virtual/zzz'
 ok('a database outage does not create false 404s', pageSeo('/festival/does-not-exist', { ...data, ok: false }).status === 200)
 
 // ---- private areas
-for (const p of ['/admin', '/network', '/theater/olive-branch', '/access']) {
+for (const p of ['/admin', '/network', '/theater/olive-branch', '/access', '/filmmaker', '/judge']) {
   const s = pageSeo(p, data)
   ok('private area ' + p + ' is noindex', s.status === 200 && s.robots.includes('noindex'))
 }
@@ -110,7 +110,7 @@ const locs = [...sm.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1])
 ok('sitemap has no duplicates', new Set(locs).size === locs.length)
 ok('sitemap lists every festival, film, current event, channel and live feed', ['/festival/olive-branch', filmPath(data.films[0]), filmPath(data.films[1]), eventPath(data.events[0]), eventPath(data.events[1]), '/channel/mix', '/live/l1/olive-branch-live', '/virtual', '/cinema', cinemaPath(data.cinema[0]), cinemaPath(data.cinema[1]), '/tv-guide'].every((p) => locs.includes('https://festaview.com' + p)))
 ok('sitemap leaves out ended events', !locs.some((l) => l.includes('/virtual/e3')))
-ok('sitemap leaves out private pages', !locs.some((l) => /\/(admin|network|theater|access)/.test(l)))
+ok('sitemap leaves out private pages', !locs.some((l) => /\/(admin|network|theater|access|filmmaker|judge)/.test(l)))
 ok('sitemap uses the real host only', locs.every((l) => l.startsWith('https://festaview.com')))
 const llms = llmsTxt(data)
 ok('llms.txt describes the site and lists festivals and films', llms.startsWith('# Festaview') && llms.includes('Olive Branch Film Festival') && llms.includes('The Sparrows Nesting') && llms.includes('https://festaview.com/festivals'))

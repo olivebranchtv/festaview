@@ -18,6 +18,7 @@ import {
 const Admin = lazy(() => import('./Admin.jsx'))
 const Network = lazy(() => import('./Network.jsx'))
 const Theater = lazy(() => import('./Theater.jsx'))
+const JudgePage = lazy(() => import('./judge.jsx'))
 const VirtualRoom = lazy(() => import('./VirtualRoom.jsx'))
 
 function Header({ path }) {
@@ -75,6 +76,7 @@ export default function App() {
   else if (route.name === 'network') page = <Suspense fallback={<p className="note pad">Loading...</p>}><PrivateTitle title="Network console" /><div className="wrap-admin"><Network /></div></Suspense>
   else if (route.name === 'theater') page = <Suspense fallback={<p className="note pad">Loading...</p>}><PrivateTitle title="Theater mode" /><Theater slug={route.slug} /></Suspense>
   else if (route.name === 'access') page = <AccessClaim search={search} />
+  else if (route.name === 'judge') page = <Suspense fallback={<p className="note pad">Loading...</p>}><JudgePage /></Suspense>
   else if (route.name === 'filmmaker') page = <FilmmakerPage search={search} />
   else if (route.name === 'submitIndex') page = <SubmitIndexPage />
   else if (route.name === 'festivalSubmit') page = <FestivalSubmitPage slug={route.slug} />

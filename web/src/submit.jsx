@@ -25,7 +25,7 @@ function Field({ label, hint, children }) {
 }
 
 // One account for every festival. Sign in or create it right where the filmmaker is.
-function AuthBox({ onDone, intro }) {
+export function AuthBox({ onDone, intro, title }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [create, setCreate] = useState(false)
@@ -44,7 +44,7 @@ function AuthBox({ onDone, intro }) {
   }
   return (
     <form className="panel narrow" onSubmit={submit}>
-      <h2>{create ? 'Create your filmmaker account' : 'Filmmaker sign in'}</h2>
+      <h2>{create ? 'Create your account' : (title || 'Filmmaker sign in')}</h2>
       <p className="note">{intro || 'One Festaview account lets you submit to any festival on the platform and track every entry.'}</p>
       <Field label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></Field>
       <Field label="Password"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={create ? 'new-password' : 'current-password'} minLength={6} required /></Field>
