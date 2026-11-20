@@ -277,16 +277,16 @@ sub onRoomTick()
     return
   end if
   if m.inAd = true then abortAd()
-  pos = n - r.startSec
+  elapsed = n - r.startSec
   found = -1
   offset = 0
-  if pos < r.total then
+  if elapsed < r.total then
     acc = 0
     for i = 0 to r.timeline.Count() - 1
       d = r.timeline[i].dur
-      if found = -1 and pos < acc + d then
+      if found = -1 and elapsed < acc + d then
         found = i
-        offset = pos - acc
+        offset = elapsed - acc
       end if
       acc = acc + d
     end for
