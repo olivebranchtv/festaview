@@ -1431,7 +1431,7 @@ export default function Admin() {
             ))}
           </nav>
           {tab === 'films' && <FilmsTab festival={current} setMsg={setMsg} />}
-          {tab === 'submissions' && <SubmissionsTab festival={current} setMsg={setMsg} />}
+          {tab === 'submissions' && <SubmissionsTab festival={current} setMsg={setMsg} onFestival={(patch) => { const next = { ...current, ...patch }; setCurrent(next); setFestivals((l) => l.map((f) => (f.id === next.id ? next : f))) }} />}
           {tab === 'live' && <LiveTab festival={current} setMsg={setMsg} />}
           {tab === 'screenings' && <ScreeningsTab festival={current} setMsg={setMsg} />}
           {tab === 'virtual' && <VirtualTab festival={current} setMsg={setMsg} />}

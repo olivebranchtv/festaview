@@ -57,7 +57,7 @@ function downloadCsv(name, rows) {
   URL.revokeObjectURL(a.href)
 }
 
-export default function SubmissionsTab({ festival, setMsg }) {
+export default function SubmissionsTab({ festival, setMsg, onFestival }) {
   const [d, setD] = useState({ categories: [], tiers: [], waivers: [], submissions: [] })
   const [set, setSet] = useState({ open: !!festival.submissions_open, opens: dateOnly(festival.submissions_opens_at), closes: dateOnly(festival.submissions_closes_at), notes: festival.submission_notes || '' })
   const [cat, setCat] = useState(null)
@@ -71,8 +71,15 @@ export default function SubmissionsTab({ festival, setMsg }) {
 
   const saveSettings = async (e) => {
     e.preventDefault()
+    if (set.closes && new Date(endOfDay(set.closes)).getTime() < Date.now()) {
+      setMsg('The final deadline ' + set.closes + ' has already passed, so filmmakers could not enter. Choose a later date, or clear the date.', true)
+      return
+    }
     try {
-      await api.saveSubmissionSettings(festival.id, { open: set.open, opens_at: startOfDay(set.opens), closes_at: endOfDay(set.closes), notes: set.notes })
+      const opens_at = startOfDay(set.opens), closes_at = endOfDay(set.closes)
+      await api.saveSubmissionSettings(festival.id, { open: set.open, opens_at, closes_at, notes: set.notes })
+      // Keep the festival the admin is holding in step, so the form shows what was saved when you come back to this tab.
+      if (onFestival) onFestival({ submissions_open: !!set.open, submissions_opens_at: opens_at || null, submissions_closes_at: closes_at || null, submission_notes: set.notes || null })
       setMsg('Submission settings saved.')
     } catch (x) { setMsg(x.message, true) }
   }
