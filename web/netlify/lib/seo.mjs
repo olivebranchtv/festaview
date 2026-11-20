@@ -172,7 +172,7 @@ export function pageSeo(pathname, data, origin) {
       const free = m.access !== 'ticketed'
       const movie = {
         '@context': 'https://schema.org', '@type': 'Movie', name: m.title, url: seo.canonical, description: clip(m.synopsis || '', 500) || undefined, image: m.poster_url || undefined,
-        director: m.director ? { '@type': 'Person', name: m.director } : undefined, duration: isoDuration(m.runtime_min), genre: m.genre || undefined,
+        director: m.director ? { '@type': 'Person', name: m.director } : undefined, duration: isoDuration(m.runtime_min), genre: (m.category && m.genre ? [m.category, m.genre] : m.category || m.genre) || undefined,
         dateCreated: m.year ? String(m.year) : undefined, countryOfOrigin: m.country || undefined, inLanguage: m.language || undefined,
         isAccessibleForFree: free, isPartOf: f ? { '@type': 'Festival', name: f.name, url: abs(festivalPath(f)) } : undefined,
         potentialAction: { '@type': 'WatchAction', target: seo.canonical },
@@ -183,7 +183,7 @@ export function pageSeo(pathname, data, origin) {
       if (m.trailer_url) seo.jsonld.push({ '@context': 'https://schema.org', '@type': 'VideoObject', name: m.title + ' trailer', description: 'Trailer for ' + m.title, thumbnailUrl: m.poster_url || DEFAULT_IMAGE, uploadDate: upload, contentUrl: m.trailer_url })
       seo.body = shell(
         crumbs(items) + '<h1>' + esc(m.title) + '</h1>' +
-        '<p>' + [m.year, m.runtime_min ? m.runtime_min + ' min' : null, m.genre, m.rating, m.country, m.language].filter(Boolean).map(esc).join(' | ') + '</p>' +
+        '<p>' + [m.category, m.year, m.runtime_min ? m.runtime_min + ' min' : null, m.genre, m.rating, m.country, m.language].filter(Boolean).map(esc).join(' | ') + '</p>' +
         (m.director ? '<p>Directed by ' + esc(m.director) + '</p>' : '') + (f ? '<p>Official Selection, ' + festivalLink(f) + '</p>' : '') +
         '<p>' + esc(m.synopsis || 'Synopsis coming soon.') + '</p><p>' + (free ? 'Free to watch on ' + esc(SITE_NAME) + '.' : 'A ticketed screening: an access code or ticket is required.') + '</p>' +
         (more.length ? '<h2>More from ' + esc(f ? f.name : 'this festival') + '</h2>' + list(more.map((x) => filmLine(x, null))) : ''),

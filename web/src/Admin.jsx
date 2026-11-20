@@ -9,7 +9,7 @@ const fromLocal = (v) => (v ? new Date(v).toISOString() : '')
 const num = (v) => (v === '' || v == null ? '' : parseInt(v, 10) || '')
 
 const EMPTY_FILM = {
-  title: '', synopsis: '', director: '', year: '', runtime_min: '', country: '', language: '', genre: '', rating: '',
+  title: '', synopsis: '', director: '', year: '', runtime_min: '', country: '', language: '', genre: '', category: '', rating: '',
   poster_url: '', video_url: '', trailer_url: '', captions_url: '', duration_sec: '', access: 'free', status: 'draft',
   premiere_at: '', available_from: '', available_until: '',
 }
@@ -177,6 +177,7 @@ function FilmsTab({ festival, setMsg }) {
         <Field label="Synopsis"><textarea rows={3} value={edit.synopsis || ''} onChange={(e) => set('synopsis')(e.target.value)} /></Field>
         <div className="two">
           <Field label="Director"><input value={edit.director || ''} onChange={(e) => set('director')(e.target.value)} /></Field>
+          <Field label="Category" hint="Shown as the film type, for example Feature Film or Short Film."><input list="film-categories" value={edit.category || ''} onChange={(e) => set('category')(e.target.value)} placeholder="Feature Film" /><datalist id="film-categories">{['Feature Film', 'Short Film', 'Documentary Feature', 'Documentary Short', 'Student Film', 'Animation', 'Vertical Series / Micro-Drama', 'TV Pilot / Episodic Series'].map((c) => <option key={c} value={c} />)}</datalist></Field>
           <Field label="Genre"><input value={edit.genre || ''} onChange={(e) => set('genre')(e.target.value)} /></Field>
           <Field label="Year"><input value={edit.year ?? ''} onChange={(e) => set('year')(e.target.value)} inputMode="numeric" /></Field>
           <Field label="Runtime (minutes)"><input value={edit.runtime_min ?? ''} onChange={(e) => set('runtime_min')(e.target.value)} inputMode="numeric" /></Field>
@@ -234,7 +235,7 @@ function FilmsTab({ festival, setMsg }) {
           <li key={m.id}>
             <div>
               <strong>{m.title}</strong>
-              <small>{[m.director, m.runtime_min ? m.runtime_min + ' min' : null, m.genre].filter(Boolean).join(' / ')}</small>
+              <small>{[m.category, m.director, m.runtime_min ? m.runtime_min + ' min' : null, m.genre].filter(Boolean).join(' / ')}</small>
             </div>
             <span className={'pill ' + m.status}>{m.status}</span>
             <button className="btn ghost" onClick={() => open(m)}>Edit</button>

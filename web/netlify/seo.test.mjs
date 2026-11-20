@@ -12,7 +12,7 @@ const data = {
     { id: 'f2', slug: 'night-owl', name: 'Night Owl Horror Fest', tagline: 'After dark', status: 'published', auto_channel: false },
   ],
   films: [
-    { id: 'm1', festival_id: 'f1', title: 'The Sparrows Nesting', synopsis: 'A quiet story about a family and a nest.', director: 'A. Moreno', year: 2024, runtime_min: 92, genre: 'Drama', poster_url: 'https://img.example/p1.jpg', video_url: 'https://cdn.example/free/playlist.m3u8', trailer_url: 'https://cdn.example/trailer/playlist.m3u8', duration_sec: 5518, access: 'free', created_at: '2026-11-01T00:00:00Z' },
+    { id: 'm1', festival_id: 'f1', title: 'The Sparrows Nesting', category: 'Feature Film', synopsis: 'A quiet story about a family and a nest.', director: 'A. Moreno', year: 2024, runtime_min: 92, genre: 'Drama', poster_url: 'https://img.example/p1.jpg', video_url: 'https://cdn.example/free/playlist.m3u8', trailer_url: 'https://cdn.example/trailer/playlist.m3u8', duration_sec: 5518, access: 'free', created_at: '2026-11-01T00:00:00Z' },
     { id: 'm2', festival_id: 'f1', title: 'Premiere <Night> & "Gala"', synopsis: 'Ticketed <b>premiere</b>.', director: 'B. Okafor', year: 2026, runtime_min: 12, genre: 'Short', video_url: null, access: 'ticketed', created_at: '2026-11-02T00:00:00Z' },
   ],
   events: [
@@ -68,6 +68,7 @@ const types = (p) => ld(p).map((x) => x['@type'])
 ok('home has Organization and WebSite', types('/').includes('Organization') && types('/').includes('WebSite'))
 ok('festival page is a Festival with dates', (() => { const f = ld('/festival/olive-branch').find((x) => x['@type'] === 'Festival'); return f && f.startDate === '2027-03-12' && f.location.name === 'Arizona' })())
 ok('film page is a Movie with duration and director', (() => { const m = ld(filmPath(data.films[0])).find((x) => x['@type'] === 'Movie'); return m && m.duration === 'PT1H32M' && m.director.name === 'A. Moreno' && m.isAccessibleForFree === true })())
+ok('film category appears in the page text and the structured data', (() => { const h = injectSeo(base, pageSeo(filmPath(data.films[0]), data)); const m = ld(filmPath(data.films[0])).find((x) => x['@type'] === 'Movie'); return h.includes('Feature Film') && JSON.stringify(m.genre).includes('Feature Film') })())
 ok('free film has a VideoObject for the film and the trailer', ld(filmPath(data.films[0])).filter((x) => x['@type'] === 'VideoObject').length === 2)
 ok('event page is an online Event with a free offer', (() => { const e = ld(eventPath(data.events[0])).find((x) => x['@type'] === 'Event'); return e && e.eventAttendanceMode.includes('Online') && e.offers.price === '0' && e.startDate })())
 ok('ticketed event offer uses the real ticket price', (() => { const e = ld(eventPath(data.events[1])).find((x) => x['@type'] === 'Event'); return e && e.offers.price === '15.00' })())

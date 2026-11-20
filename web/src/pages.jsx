@@ -469,7 +469,7 @@ export function FilmPage({ data, id }) {
   if (!film) return <NotFoundPage />
   const locked = film.access === 'ticketed' && !stream
   const more = data.films.filter((m) => m.festival_id === film.festival_id && m.id !== film.id).slice(0, 6)
-  const meta = [film.year, film.runtime_min ? film.runtime_min + ' min' : null, film.genre, film.rating, film.country, film.language].filter(Boolean).join('  |  ')
+  const meta = [film.category, film.year, film.runtime_min ? film.runtime_min + ' min' : null, film.genre, film.rating, film.country, film.language].filter(Boolean).join('  |  ')
   return (
     <article className="block film-page">
       <nav className="crumbs" aria-label="Breadcrumb">
@@ -637,7 +637,7 @@ export function FestivalPage({ data, slug }) {
   const events = upcomingEvents(data, fest.id)
   const chan = buildChannels(data).find((c) => c.festivalId === fest.id)
   const nav = [['about', 'About'], events.length ? ['virtual', 'Virtual'] : null, showPasses ? ['passes', 'Passes'] : null, chan ? ['channel', 'Channel'] : null, films.length ? ['selection', 'Films'] : null, feeds.length ? ['live', 'Live'] : null, sched.length ? ['schedule', 'Schedule'] : null, theaterShows.length ? ['theaters', 'In theaters'] : null].filter(Boolean)
-  const meta = (m) => [m.year, m.runtime_min ? m.runtime_min + ' min' : null, m.genre, m.rating].filter(Boolean).join('  |  ')
+  const meta = (m) => [m.category, m.year, m.runtime_min ? m.runtime_min + ' min' : null, m.genre, m.rating].filter(Boolean).join('  |  ')
 
   return (
     <div className="fp" style={{ '--accent': accent, '--gold': accent, '--accent-text': accentText(accent) }}>

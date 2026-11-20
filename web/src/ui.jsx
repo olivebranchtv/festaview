@@ -52,7 +52,7 @@ export function FilmCard({ film, festival }) {
       </div>
       <div className="card-title">{film.title}</div>
       <div className="card-meta">
-        {[film.director, film.runtime_min ? film.runtime_min + ' min' : null, film.genre].filter(Boolean).join(' / ')}
+        {[film.category, film.director, film.runtime_min ? film.runtime_min + ' min' : null, film.genre].filter(Boolean).join(' / ')}
       </div>
       {festival && <div className="card-fest">{festival.name}</div>}
     </a>

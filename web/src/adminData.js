@@ -89,6 +89,11 @@ export async function saveFilm(fid, film) {
     const { access, ...rest } = row
     r = await write(rest)
   }
+  // If the film category SQL has not been run yet, saving still works without the category.
+  if (r.error && 'category' in row && /category/i.test(r.error.message || '')) {
+    const { category, ...rest } = row
+    r = await write(rest)
+  }
   if (r.error) throw r.error
 }
 export async function deleteFilm(id) {
