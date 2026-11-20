@@ -30,9 +30,9 @@ SceneGraph channel. Reads festivals, films, live feeds and the Festaview Cinemas
 - Leave other sites' Roku channels and feeds alone.
 
 ## Sideload for testing
-Enable developer mode on the Roku, then zip the CONTENTS of this folder (manifest must be at the zip root):
+Enable developer mode on the Roku, then build the zip (a real zip with the manifest at its root; Git Bash tar writes a tar file the Roku calls corrupt, so use this script):
 
-    tar -a -c -f festaview-roku-sideload.zip -C roku manifest components source
+    python roku/build-zip.py
 
 Upload the zip at http://<roku-ip> (developer installer). Then check, in this order:
 1. The home screen loads and shows a "Festaview Cinemas" row when a showing is scheduled.
