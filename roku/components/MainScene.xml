@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="MainScene" extends="Scene">
+  <script type="text/brightscript" uri="pkg:/components/Config.brs" />
   <script type="text/brightscript" uri="pkg:/components/Channels.brs" />
+  <script type="text/brightscript" uri="pkg:/components/Cinema.brs" />
+  <script type="text/brightscript" uri="pkg:/components/SceneAds.brs" />
   <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
   <children>
     <Rectangle width="1280" height="720" color="0x0B0B12FF" />
@@ -21,5 +24,12 @@
       visible="false" />
     <Label id="status" text="Loading festivals..." translation="[60,340]" width="1100" height="40" color="0xFFFFFFFF" />
     <Video id="player" width="1280" height="720" visible="false" />
+    <Rectangle id="roomCard" width="1280" height="720" color="0x0B0B12F2" visible="false">
+      <Label id="roomTitle" text="" translation="[80,250]" width="1120" height="70" horizAlign="center" color="0xE6B34AFF" />
+      <Label id="roomLine" text="" translation="[80,340]" width="1120" height="50" horizAlign="center" color="0xFFFFFFFF" />
+      <Label id="roomHint" text="Press Back to leave the theater" translation="[80,430]" width="1120" height="36" horizAlign="center" color="0x888888FF" />
+    </Rectangle>
+    <Timer id="adWatch" repeat="true" duration="1" />
+    <Timer id="roomTimer" repeat="true" duration="1" />
   </children>
 </component>

@@ -1,7 +1,9 @@
 title=Festaview
 major_version=1
 minor_version=0
-build_version=00001
+build_version=00002
 splash_color=#0B0B12
 ui_resolutions=hd
+bs_libs_required=roku_ads_lib
+track_url=https://festaview.com/.netlify/functions/roku-track
 bs_const=

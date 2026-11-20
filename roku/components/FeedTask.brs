@@ -31,5 +31,8 @@ sub fetchFeed()
   if type(films) <> "roArray" then films = []
   feeds = httpGetJson("live_feeds?select=*")
   if type(feeds) <> "roArray" then feeds = []
-  m.top.result = { festivals: festivals, films: films, feeds: feeds }
+  ' Festaview Cinemas: what is playing on each screen (public view; an error from the server comes back as an object, so check the type).
+  cinema = httpGetJson("cinema_board?select=*&order=starts_at.asc")
+  if type(cinema) <> "roArray" then cinema = []
+  m.top.result = { festivals: festivals, films: films, feeds: feeds, cinema: cinema }
 end sub

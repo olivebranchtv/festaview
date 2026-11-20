@@ -6,6 +6,8 @@ import checkout from './functions/checkout.mjs'
 import webhook from './functions/stripe-webhook.mjs'
 import vstart from './functions/virtual-start.mjs'
 import claim from './functions/claim.mjs'
+import rokuVast, { spotVast, forRoku, hasAd } from './functions/roku-vast.mjs'
+import rokuTrack from './functions/roku-track.mjs'
 
 let pass = 0, fail = 0
 const ok = (name, cond, extra = '') => { cond ? pass++ : fail++; console.log((cond ? 'PASS ' : 'FAIL ') + name + (cond ? '' : ' ' + extra)) }
@@ -304,6 +306,85 @@ ok('the last 5 seconds announce the feature', preshowWhere(plan, lobbyAt, showAt
 ok('at showtime the pre-show is over', preshowWhere(plan, lobbyAt, showAt, showAt) === null)
 ok('with no reel the doors-open card shows, then the reminder', preshowWhere([], lobbyAt, showAt, lobbyAt + 5000).phase === 'gap' && preshowWhere(null, lobbyAt, showAt, showAt - 10000).phase === 'phone')
 ok('ads and trailers are labelled differently', adLabel({ kind: 'ad' }) === 'Advertisement' && adLabel({ kind: 'trailer' }) === 'Coming attractions')
+
+
+// --- Roku ad waterfall: Adtelligent first, our own spots fill the rest
+process.env.ROKU_ADTELLIGENT_TAG = 'https://ads.example/vast?w={w}&h={h}&cb={cb}&tid={tid}&uip={uip}'
+const AD_XML = '<?xml version="1.0"?><VAST version="2.0"><Ad id="1"><InLine><AdSystem>Adt</AdSystem><Impression><![CDATA[https://adt.example/imp]]></Impression></InLine></Ad></VAST>'
+const NOAD_XML = '<?xml version="1.0"?><VAST version="2.0"></VAST>'
+let adtMode = 'ad'
+let spotsData = [
+  { id: 'aaaa', title: 'Rodeo Hard', video_url: 'https://vz-faf13d4f-4d7.b-cdn.net/ab6e2a27-a54f-4841-aabe-1149175e5a04/playlist.m3u8', click_url: 'https://rodeohard.com', duration_seconds: 30 },
+]
+const adtCalls = [], rpcLog = []
+const fetchBeforeRoku = globalThis.fetch
+globalThis.fetch = async (url, opts = {}) => {
+  const u = new URL(String(url))
+  if (u.host === 'ads.example') {
+    adtCalls.push(String(url))
+    if (adtMode === 'fail') throw new Error('Adtelligent is down')
+    return new Response(adtMode === 'ad' ? AD_XML : NOAD_XML, { status: 200 })
+  }
+  if (u.pathname.endsWith('/rpc/roku_spots')) return new Response(JSON.stringify(spotsData), { status: 200 })
+  if (u.pathname.endsWith('/rpc/roku_bump_ad') || u.pathname.endsWith('/rpc/roku_log_ad')) { rpcLog.push({ name: u.pathname.split('/').pop(), body: JSON.parse(opts.body) }); return new Response(null, { status: 204 }) }
+  return fetchBeforeRoku(url, opts)
+}
+const getVast = (qs = '') => rokuVast(new Request('https://site.example/.netlify/functions/roku-vast?w=1920&h=1080&cb=1&tid=abc&uip=1.2.3.4' + qs, { method: 'GET' }))
+
+let rv = await getVast()
+let rvBody = await rv.text()
+ok('Adtelligent ad is relayed unchanged and is tried first', rv.headers.get('X-Ad-Source') === 'adtelligent' && rvBody === AD_XML && adtCalls.length === 1)
+ok('Adtelligent address gets the device details', adtCalls[0].includes('w=1920') && adtCalls[0].includes('tid=abc') && adtCalls[0].includes('uip=1.2.3.4'))
+ok('slots are counted: asked and filled', rpcLog.some((r) => r.body.p_source === 'adtelligent' && r.body.p_event === 'request') && rpcLog.some((r) => r.body.p_source === 'adtelligent' && r.body.p_event === 'filled'))
+
+adtMode = 'empty'; rpcLog.length = 0
+rv = await getVast(); rvBody = await rv.text()
+ok('no Adtelligent ad: one of our own spots plays', rv.headers.get('X-Ad-Source') === 'fallback' && rvBody.includes('spot-aaaa') && rvBody.includes('Rodeo Hard'))
+ok('our spot uses the plain mp4 and has no tracking address', rvBody.includes('/play_720p.mp4') && !rvBody.includes('playlist.m3u8') && rvBody.includes('<Impression><![CDATA[]]></Impression>'))
+ok('our spot keeps its click-through link', rvBody.includes('https://rodeohard.com'))
+ok('fallback slot is counted', rpcLog.some((r) => r.body.p_source === 'fallback' && r.body.p_event === 'filled' && r.body.p_spot === 'spot-aaaa'))
+
+adtMode = 'fail'
+rv = await getVast(); rvBody = await rv.text()
+ok('Adtelligent down or too slow: our spot still plays', rv.headers.get('X-Ad-Source') === 'fallback' && rvBody.includes('spot-aaaa'))
+
+adtMode = 'ad'; adtCalls.length = 0
+rv = await getVast('&force=fallback'); rvBody = await rv.text()
+ok('force=fallback skips Adtelligent', rv.headers.get('X-Ad-Source') === 'fallback' && adtCalls.length === 0)
+
+rpcLog.length = 0
+rv = await getVast('&debug=1'); rvBody = await rv.text()
+ok('debug shows the path without counting', rvBody === '<debug>adtelligent</debug>' && rpcLog.length === 0)
+
+spotsData = []; adtMode = 'empty'
+rv = await getVast(); rvBody = await rv.text()
+ok('nothing to play: empty VAST so Roku skips the slot', rv.headers.get('X-Ad-Source') === 'none' && !hasAd(rvBody))
+
+spotsData = [{ id: 'bbbb', title: 'Insecure', video_url: 'http://example.com/x.mp4', duration_seconds: 10 }]
+rv = await getVast(); rvBody = await rv.text()
+ok('a spot that is not https is never played', rv.headers.get('X-Ad-Source') === 'none')
+
+const savedTag = process.env.ROKU_ADTELLIGENT_TAG
+delete process.env.ROKU_ADTELLIGENT_TAG; adtCalls.length = 0
+spotsData = [{ id: 'cccc', title: 'Quanio TV', video_url: 'https://x.b-cdn.net/c26f8452-a46f-4653-9c9d-01cd91065563/playlist.m3u8', duration_seconds: 16 }]
+rv = await getVast(); rvBody = await rv.text()
+ok('no Adtelligent tag set: straight to our own spots, no outside request', rv.headers.get('X-Ad-Source') === 'fallback' && adtCalls.length === 0)
+process.env.ROKU_ADTELLIGENT_TAG = savedTag
+ok('the Roku conversion only touches Bunny playlist links', forRoku('https://other.example/a/playlist.m3u8') === 'https://other.example/a/playlist.m3u8' && forRoku('https://z.b-cdn.net/0f-1/playlist.m3u8') === 'https://z.b-cdn.net/0f-1/play_720p.mp4')
+
+// --- Roku ad reports go to the database against the title that was playing
+const TITLE = '66666666-6666-4666-8666-666666666666'
+rpcLog.length = 0
+await rokuTrack(new Request('https://site.example/x', { method: 'POST', body: JSON.stringify({ type: 'rokuad', titleid: TITLE, title: 'The Sparrows Nesting', phase: 'lobby', kind: 'Impression', device: 'dev1' }) }))
+ok('an ad impression is reported for the title (lower-case key from BrightScript)', rpcLog.length === 1 && rpcLog[0].name === 'roku_log_ad' && rpcLog[0].body.p_title === TITLE && rpcLog[0].body.p_kind === 'impression' && rpcLog[0].body.p_phase === 'lobby')
+rpcLog.length = 0
+await rokuTrack(new Request('https://site.example/x', { method: 'POST', body: JSON.stringify({ type: 'rokuad', titleId: 'not-a-uuid', kind: 'impression' }) }))
+await rokuTrack(new Request('https://site.example/x', { method: 'POST', body: JSON.stringify({ type: 'rokuad', titleId: TITLE, kind: 'click' }) }))
+await rokuTrack(new Request('https://site.example/x', { method: 'POST', body: 'garbage' }))
+ok('bad ad reports are ignored without errors', rpcLog.length === 0)
+const trk = await rokuTrack(new Request('https://site.example/x', { method: 'GET' }))
+ok('roku-track GET is a quiet no-op', trk.status === 204)
+globalThis.fetch = fetchBeforeRoku
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed')
 process.exit(fail ? 1 : 0)

@@ -655,3 +655,29 @@ export async function updateShowing(id, a) {
   if (r.error) throw r.error
   return r.data
 }
+
+// ---- Roku ads (network owner): our own fallback spots and the Adtelligent fill report ----
+export async function listRokuSpots() {
+  const r = await supabase.from('roku_fallback_spots').select('*').order('created_at')
+  if (r.error) throw r.error
+  return r.data || []
+}
+export async function addRokuSpot(s) {
+  const r = await supabase.from('roku_fallback_spots').insert({ title: s.title, video_url: s.video_url, click_url: s.click_url || null, duration_seconds: s.duration_seconds })
+  if (r.error) throw r.error
+}
+export async function setRokuSpotActive(id, active) {
+  const r = await supabase.from('roku_fallback_spots').update({ active }).eq('id', id)
+  if (r.error) throw r.error
+}
+export async function deleteRokuSpot(id) {
+  const r = await supabase.from('roku_fallback_spots').delete().eq('id', id)
+  if (r.error) throw r.error
+}
+// Slot counts for the last N days (a flat table; summed in the page).
+export async function rokuAdCounts(days) {
+  const since = new Date(Date.now() - (days + 1) * 864e5).toISOString().slice(0, 10)
+  const r = await supabase.from('roku_ad_counts').select('day,source,spot,event,n').gte('day', since)
+  if (r.error) throw r.error
+  return r.data || []
+}

@@ -1,6 +1,6 @@
-' Festaview hub: one row per festival (its films), with a "Live Now" row first.
-' NOTE: Ad integration (RAF / Adtelligent) is intentionally NOT written here. Add it by copying the proven
-' ad task from an existing, working channel and do not alter its RAF parameters.
+' Festaview hub: a "Festaview Cinemas" row (what is playing now on each screen), the TV Guide, "Live Now", then one row per festival.
+' Ads: the proven ad task (AdTask.brs, AdTracking.brs) is copied unchanged from the working channels and must not be edited.
+' SceneAds.brs decides when an ad pod runs; Config.brs holds the ad address (the roku-vast waterfall on the website).
 
 sub init()
   m.rows = m.top.findNode("rows")
@@ -12,6 +12,24 @@ sub init()
   m.channels = []
   m.guideRow = -1
   m.nowChannel = invalid
+
+  ' Festaview Cinemas room, and ad plumbing (see Cinema.brs and SceneAds.brs)
+  m.cinemaRow = -1
+  m.room = invalid
+  m.cinemaTask = invalid
+  m.roomCard = m.top.findNode("roomCard")
+  m.roomTitle = m.top.findNode("roomTitle")
+  m.roomLine = m.top.findNode("roomLine")
+  m.roomTimer = m.top.findNode("roomTimer")
+  m.roomTimer.observeField("fire", "onRoomTick")
+  m.roomErrors = 0
+  m.inAd = false
+  m.afterAd = invalid
+  m.baseKids = invalid
+  m.ad = invalid
+  m.adIdle = 0
+  m.adWatch = m.top.findNode("adWatch")
+  m.adWatch.observeField("fire", "onAdWatch")
 
   ' Viewing reports: what is playing, where watching started, and the last position seen.
   m.nowItem = invalid
@@ -34,13 +52,16 @@ sub onFeedResult()
   data = m.feedTask.result
   root = CreateObject("roSGNode", "ContentNode")
 
+  ' Festaview Cinemas row first: what is playing now and next on each screen
+  addCinemaRow(root, data.cinema)
+
   ' TV Guide row: automatic festival channels (scheduled playback, same film for everyone at the same time)
   m.channels = buildChannels(data)
   m.guideRow = -1
   if m.channels.Count() > 0 then
+    m.guideRow = root.GetChildCount()
     guide = root.CreateChild("ContentNode")
     guide.title = "TV Guide"
-    m.guideRow = 0
     for each ch in m.channels
       n = channelNow(ch)
       cur = ch.items[n.index]
@@ -101,15 +122,32 @@ sub onFeedResult()
 end sub
 
 sub onItemSelected()
+  if m.inAd = true then return
   idx = m.rows.rowItemSelected
+  if idx[0] = m.cinemaRow then
+    openShowing(m.rows.content.GetChild(idx[0]).GetChild(idx[1]))
+    return
+  end if
   if idx[0] = m.guideRow then
     ch = m.channels[idx[1]]
     n = channelNow(ch)
-    startChannelItem(ch, n.index, n.offset)
+    cur = ch.items[n.index]
+    runAdThen({ kind: "channel", ch: ch }, 1, "preroll", cur.filmId, cur.title)
     return
   end if
   item = m.rows.content.GetChild(idx[0]).GetChild(idx[1])
   if item.url = "" then return
+  tid = ""
+  if item.filmId <> invalid then
+    tid = item.filmId
+  else if item.liveId <> invalid then
+    tid = item.liveId
+  end if
+  runAdThen({ kind: "item", item: item }, 1, "preroll", tid, item.title)
+end sub
+
+' Plays a film or live feed from the rows, after any ad has finished.
+sub playItemNow(item as object)
   flushView()
   m.nowChannel = invalid
   m.nowItem = { festivalId: item.festivalId, filmId: item.filmId, liveId: item.liveId }
@@ -179,10 +217,29 @@ sub flushView()
 end sub
 
 sub onPlayerState()
+  ' While an ad pod runs, the ad library owns the picture: ignore the video node's own state changes.
+  if m.inAd = true then return
   s = m.player.state
   if s = "playing" and m.watchStart = invalid then
     m.watchStart = m.player.position
     m.lastPos = m.player.position
+  end if
+  if m.room <> invalid then
+    ' In a Festaview Cinemas room the clock decides what plays next (onRoomTick), so a finished film just waits for it.
+    if s = "playing" then m.roomErrors = 0
+    if s = "finished" then
+      flushView()
+    else if s = "error" then
+      flushView()
+      m.roomErrors = m.roomErrors + 1
+      if m.roomErrors >= 3 then
+        m.roomErrors = 0
+        closeRoom("Playback problem. Please try again.")
+      else
+        m.room.curIdx = -1
+      end if
+    end if
+    return
   end if
   if s = "finished" then
     flushView()
@@ -206,6 +263,10 @@ sub closePlayer()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+  if press and key = "back" and m.room <> invalid then
+    closeRoom("")
+    return true
+  end if
   if press and key = "back" and m.player.visible then
     closePlayer()
     return true

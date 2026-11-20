@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="AdTask" extends="Task">
+  <interface>
+    <field id="vastUrl" type="string" />
+    <field id="adCount" type="integer" value="1" />
+    <field id="videoNode" type="node" />
+    <field id="titleId" type="string" value="" />
+    <field id="titleName" type="string" value="" />
+    <field id="phase" type="string" value="preroll" />
+    <field id="adBeat" type="integer" value="0" />
+    <field id="adDone" type="boolean" value="false" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/AdTask.brs" />
+  <script type="text/brightscript" uri="pkg:/components/AdTracking.brs" />
+</component>
