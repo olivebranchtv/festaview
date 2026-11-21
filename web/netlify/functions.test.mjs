@@ -7,7 +7,7 @@ import checkout from './functions/checkout.mjs'
 import webhook from './functions/stripe-webhook.mjs'
 import vstart from './functions/virtual-start.mjs'
 import claim from './functions/claim.mjs'
-import rokuVast, { spotVast, forRoku, hasAd, adLabel as vastAdLabel } from './functions/roku-vast.mjs'
+import rokuVast, { spotVast, forRoku, hasAd, adLabel as vastAdLabel, deviceKey } from './functions/roku-vast.mjs'
 import rokuTrack from './functions/roku-track.mjs'
 
 let pass = 0, fail = 0
@@ -326,6 +326,14 @@ globalThis.fetch = async (url, opts = {}) => {
     if (adtMode === 'fail') throw new Error('Adtelligent is down')
     return new Response(adtMode === 'ad' ? AD_XML : NOAD_XML, { status: 200 })
   }
+  if (u.pathname.endsWith('/rpc/roku_pick_spot')) {
+    const dev = JSON.parse(opts.body).p_device
+    if (!spotsData.length) return new Response('null', { status: 200 })
+    const last = (id) => { for (let i = rpcLog.length - 1; i >= 0; i--) { const e = rpcLog[i]; if (e.name === 'roku_log_serve' && e.body.p_device === dev && e.body.p_spot === id) return i } return -1 }
+    let best = spotsData[0]
+    for (const sp of spotsData) if (last(sp.id) < last(best.id)) best = sp
+    return new Response(JSON.stringify(best), { status: 200 })
+  }
   if (u.pathname.endsWith('/rpc/roku_spots')) return new Response(JSON.stringify(spotsData), { status: 200 })
   if (u.pathname.endsWith('/rpc/roku_bump_ad') || u.pathname.endsWith('/rpc/roku_log_ad') || u.pathname.endsWith('/rpc/roku_log_serve')) { rpcLog.push({ name: u.pathname.split('/').pop(), body: JSON.parse(opts.body) }); return new Response(null, { status: 204 }) }
   return fetchBeforeRoku(url, opts)
@@ -357,6 +365,25 @@ ok('a house ad is logged against the title with its spot name', rpcLog.some((x) 
 rpcLog.length = 0
 await getVast('&title=not-a-uuid')
 ok('a title that is not an id is not stored as one', rpcLog.some((x) => x.name === 'roku_log_serve' && x.body.p_title === null))
+// --- house ads take turns for each viewer and never repeat back to back
+const spotsBackup = spotsData
+const SA = 'aaaaaaaa-0000-4000-8000-000000000001', SB = 'aaaaaaaa-0000-4000-8000-000000000002', SC = 'aaaaaaaa-0000-4000-8000-000000000003'
+spotsData = [SA, SB, SC].map((id, i) => ({ id, title: 'Spot ' + (i + 1), video_url: 'https://z.b-cdn.net/0f-1/playlist.m3u8', duration_seconds: 10 }))
+rpcLog.length = 0
+const seq = []
+for (let i = 0; i < 7; i++) { const r2 = await getVast(); seq.push(/spot-([0-9a-f-]{36})/.exec(await r2.text())[1]) }
+ok('house spots take turns and never repeat back to back', seq.every((v, i) => i === 0 || v !== seq[i - 1]) && new Set(seq.slice(0, 3)).size === 3)
+ok('the rotation repeats in the same order', seq[3] === seq[0] && seq[4] === seq[1] && seq[5] === seq[2])
+const otherViewer = await rokuVast(new Request('https://site.example/.netlify/functions/roku-vast?w=1920&h=1080&cb=1&tid=another-device&uip=9.9.9.9', { method: 'GET' }))
+ok('a different viewer starts their own rotation', /spot-([0-9a-f-]{36})/.exec(await otherViewer.text())[1] === SA)
+ok('the viewer is stored as a one-way key, never the Roku id', rpcLog.filter((x) => x.name === 'roku_log_serve').every((x) => typeof x.body.p_device === 'string' && x.body.p_device.length === 24 && !x.body.p_device.includes('abc')))
+ok('limited ad tracking (all-zero id) uses the address instead; nothing to go on means no key', deviceKey('00000000-0000-0000-0000-000000000000', '5.6.7.8') === deviceKey('', '5.6.7.8') && deviceKey('', '') === null && deviceKey('abc', '1.1.1.1') !== deviceKey('abd', '1.1.1.1'))
+spotsData = [{ id: SA, title: 'Only', video_url: 'https://z.b-cdn.net/0f-1/playlist.m3u8', duration_seconds: 10 }]
+const one = await getVast()
+ok('with only one spot active it plays that spot', /spot-/.test(await one.text()))
+spotsData = spotsBackup
+rpcLog.length = 0
+await getVast()
 ok('fallback slot is counted', rpcLog.some((r) => r.body.p_source === 'fallback' && r.body.p_event === 'filled' && r.body.p_spot === 'spot-aaaa'))
 
 adtMode = 'fail'

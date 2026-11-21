@@ -3,7 +3,8 @@
 // The Roku app keeps asking for one VAST address. When that address is this function:
 //   1. build Festaview's Adtelligent tag from the device details Roku passes in (the tag comes from ROKU_ADTELLIGENT_TAG)
 //   2. fetch it with a short timeout. If the reply has an ad, relay it unchanged so Adtelligent's own tracking still fires.
-//   3. otherwise play one of our own spots (Network console > Roku ads), picked at random
+//   3. otherwise play one of our own spots (Network console > Roku ads). The spots take turns for each viewer: the one they saw least
+//      recently is next, so the same spot never plays twice in a row (viewers are told apart by a one-way hash of their Roku ad id)
 //   4. if there is nothing to play, return an empty VAST and the Roku skips the slot
 //
 // Our own spots carry NO tracking events on purpose: the TV reports every ad that plays against the title being watched, and
@@ -12,6 +13,17 @@
 //
 // Adtelligent tag: set ROKU_ADTELLIGENT_TAG in the Netlify environment (never put the zone or channel id in the code). It is the full
 // Adtelligent address with these placeholders: {w} {h} {cb} {ua} {uip} {model} {store} {tid}. Until it is set, every slot goes straight to our own spots.
+
+import { createHash } from 'node:crypto'
+
+// A one-way key for "this viewer", used only to rotate spots. It comes from the Roku ad id, or from the IP address when the viewer has
+// limited ad tracking switched on (the ad id is then all zeros). The id itself is never stored.
+export function deviceKey(tid, uip) {
+  const t = String(tid || '').trim()
+  const basis = t && !/^[0-]*$/.test(t) ? t : String(uip || '').trim()
+  if (!basis) return null
+  return createHash('sha256').update('festaview-roku:' + basis).digest('hex').slice(0, 24)
+}
 
 const SB_URL = () => process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://ckxwyhyjokpamgygdsoq.supabase.co'
 // The public (publishable) key, the same one the website and the Roku channel use. It is public by design.
@@ -72,7 +84,8 @@ export default async (req) => {
   // with its source (Adtelligent or our own spot), which ad it was, and the rate it pays (see roku_log_serve in migration 023).
   const titleId = /^[0-9a-f-]{36}$/i.test(q.get('title') || '') ? q.get('title') : null
   const titleName = (q.get('tn') || '').slice(0, 200)
-  const logServe = (source, label, spotId) => { if (!debug) pending.push(rpc('roku_log_serve', { p_title: titleId, p_title_name: titleName, p_source: source, p_label: label, p_spot: spotId || null }, 1000)) }
+  const device = deviceKey(q.get('tid'), q.get('uip') || req.headers.get('x-nf-client-connection-ip'))
+  const logServe = (source, label, spotId) => { if (!debug) pending.push(rpc('roku_log_serve', { p_title: titleId, p_title_name: titleName, p_source: source, p_label: label, p_spot: spotId || null, p_device: device }, 1000)) }
 
   // 1) Adtelligent first (only when the Festaview tag has been set)
   if (q.get('force') !== 'fallback' && /^https:\/\//i.test(tagTemplate)) {
@@ -90,15 +103,20 @@ export default async (req) => {
   }
 
   // 2) One of our own spots
+  const serveSpot = (sp) => {
+    const vast = spotVast(sp); if (!vast) return null
+    console.log(JSON.stringify({ src: 'fallback', spot: 'spot-' + sp.id }))
+    tally('fallback', 'spot-' + sp.id, 'filled')
+    logServe('house', sp.title || 'spot-' + sp.id, /^[0-9a-f-]{36}$/i.test(String(sp.id)) ? sp.id : null)
+    return done(debug ? xml('<debug>fallback: ' + sp.title + ' | adtelligent: ' + adt + '</debug>') : xml(vast, { 'X-Ad-Source': 'fallback' }))
+  }
+  // The spot this viewer saw least recently comes first, so spots take turns and do not repeat back to back.
+  const picked = await rpc('roku_pick_spot', { p_device: device }, 1500)
+  if (picked && picked.id) { const out = serveSpot(picked); if (out) return out }
+  // Fallback (for example before the rotation SQL has been run, or if the picked spot is unusable): any active spot, in random order.
   const spots = await rpc('roku_spots', {}, 1500)
   if (Array.isArray(spots) && spots.length) {
-    for (const sp of [...spots].sort(() => Math.random() - 0.5)) {
-      const vast = spotVast(sp); if (!vast) continue
-      console.log(JSON.stringify({ src: 'fallback', spot: 'spot-' + sp.id }))
-      tally('fallback', 'spot-' + sp.id, 'filled')
-      logServe('house', sp.title || 'spot-' + sp.id, /^[0-9a-f-]{36}$/i.test(String(sp.id)) ? sp.id : null)
-      return done(debug ? xml('<debug>fallback: ' + sp.title + ' | adtelligent: ' + adt + '</debug>') : xml(vast, { 'X-Ad-Source': 'fallback' }))
-    }
+    for (const sp of [...spots].sort(() => Math.random() - 0.5)) { const out = serveSpot(sp); if (out) return out }
   }
 
   // 3) nothing to play
