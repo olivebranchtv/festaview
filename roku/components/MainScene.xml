@@ -18,6 +18,7 @@
     <Label id="heroTitle" translation="[60,182]" width="800" height="56" font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />
     <Label id="heroMeta" translation="[60,244]" width="800" height="30" font="font:SmallSystemFont" color="0xDDDDDDFF" />
     <Label id="heroDesc" translation="[60,282]" width="640" height="96" wrap="true" lineSpacing="2" font="font:SmallestSystemFont" color="0xCCCCCCFF" />
+    <Label id="buildInfo" translation="[1000,690]" width="260" height="24" horizAlign="right" font="font:SmallestSystemFont" color="0x777777FF" />
     <Label id="heroHint" translation="[60,382]" width="700" height="24" visible="false" font="font:SmallestSystemFont" color="0x999999FF" />
     <RowList
       id="rows"

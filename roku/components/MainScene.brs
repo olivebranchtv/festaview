@@ -6,6 +6,8 @@ sub init()
   ' The Roku's default scene background is blue; use Festaview's dark colour instead.
   m.top.backgroundURI = ""
   m.top.backgroundColor = "0x0B0B12FF"
+  ' Small version label (bottom right of the home screen) so it is always clear which build is installed
+  m.top.findNode("buildInfo").text = "Festaview " + CreateObject("roAppInfo").GetVersion()
   m.rows = m.top.findNode("rows")
   m.status = m.top.findNode("status")
   m.player = m.top.findNode("player")
