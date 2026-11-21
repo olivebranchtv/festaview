@@ -65,7 +65,19 @@ sub onFeedError()
   m.status.text = m.feedTask.error
 end sub
 
+' If building the home screen ever fails, show the reason on screen (instead of leaving "Loading...") so it can be fixed from a photo.
 sub onFeedResult()
+  try
+    buildHome()
+  catch e
+    m.status.visible = true
+    m.status.text = "Home screen error: " + e.message + "   " + Left(FormatJson(e.backtrace), 260)
+    print "Festaview home error: "; e.message
+    print FormatJson(e.backtrace)
+  end try
+end sub
+
+sub buildHome()
   data = m.feedTask.result
   root = CreateObject("roSGNode", "ContentNode")
 
@@ -192,6 +204,15 @@ function focusedRowInfo() as dynamic
 end function
 
 sub onRowFocus()
+  try
+    refreshHero()
+  catch e
+    m.heroDesc.text = "Hero error: " + e.message + "  " + Left(FormatJson(e.backtrace), 200)
+    print "Festaview hero error: "; e.message
+  end try
+end sub
+
+sub refreshHero()
   stopHeroVideo()
   info = focusedRowInfo()
   if info = invalid then return
