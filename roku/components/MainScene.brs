@@ -56,6 +56,8 @@ sub init()
   m.roomLine = m.top.findNode("roomLine")
   m.roomTimer = m.top.findNode("roomTimer")
   m.roomTimer.observeField("fire", "onRoomTick")
+  m.joinTimer = m.top.findNode("joinTimer")
+  m.joinTimer.observeField("fire", "onJoinTimeout")
   m.roomErrors = 0
   m.inAd = false
   m.afterAd = invalid
@@ -583,6 +585,10 @@ sub closePlayer()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+  if press and key = "back" and m.cinemaTask <> invalid then
+    cancelJoin()
+    return true
+  end if
   if press and key = "options" and m.room = invalid and m.inAd <> true and m.player.visible <> true then
     toggleHeroSound()
     return true

@@ -48,5 +48,6 @@
     </Animation>
     <Timer id="adWatch" repeat="true" duration="1" />
     <Timer id="roomTimer" repeat="true" duration="1" />
+    <Timer id="joinTimer" repeat="false" duration="25" />
   </children>
 </component>

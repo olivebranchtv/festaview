@@ -159,11 +159,32 @@ sub startJoin(item as object, code as string)
   m.joinItem = item
   m.joinCode = code
   t = CreateObject("roSGNode", "CinemaTask")
-  t.observeField("result", "onJoinResult")
+  t.observeField("raw", "onJoinResult")
   t.request = { showingId: item.showingId, deviceId: m.deviceId, code: code }
   m.cinemaTask = t
   t.control = "RUN"
+  m.joinTimer.control = "start"
   showRoomCard(item.title, "Finding your seat...")
+end sub
+
+' Back while "Finding your seat..." is showing: give up on joining and return to the home screen.
+sub cancelJoin()
+  m.joinTimer.control = "stop"
+  if m.cinemaTask <> invalid then m.cinemaTask.control = "STOP"
+  m.cinemaTask = invalid
+  hideRoomCard()
+  m.rows.setFocus(true)
+  onRowFocus()
+end sub
+
+' Safety net: if the website does not answer, say so instead of waiting forever.
+sub onJoinTimeout()
+  if m.cinemaTask = invalid then return
+  m.cinemaTask.control = "STOP"
+  m.cinemaTask = invalid
+  hideRoomCard()
+  m.rows.setFocus(true)
+  showNote("Festaview Cinemas", ["Could not reach Festaview.", "Check the internet connection and try again."])
 end sub
 
 sub showNote(titleText as string, lines as object)
@@ -183,12 +204,20 @@ sub onNoteButton()
 end sub
 
 sub onJoinResult()
-  r = m.cinemaTask.result
+  m.joinTimer.control = "stop"
+  raw = ""
+  if m.cinemaTask <> invalid then raw = m.cinemaTask.raw
   m.cinemaTask = invalid
   hideRoomCard()
   m.rows.setFocus(true)
+  ' The answer comes back as JSON text; read it here.
+  r = ParseJson(raw)
   st = "error"
-  if r <> invalid and r.status <> invalid then st = r.status
+  if r <> invalid then
+    if type(r) = "roAssociativeArray" then
+      if r.status <> invalid then st = r.status
+    end if
+  end if
   title = "Festaview Cinemas"
   if st = "ok" then
     if m.joinCode <> "" then saveTicket(m.joinItem.showingId, m.joinCode)
@@ -206,7 +235,13 @@ sub onJoinResult()
   else if st = "not_found" then
     showNote(title, ["This showing is not available."])
   else
-    showNote(title, ["Could not join right now. Please try again."])
+    lines = ["Could not join right now. Please try again."]
+    if r <> invalid then
+      if type(r) = "roAssociativeArray" then
+        if r.detail <> invalid then lines.Push(r.detail)
+      end if
+    end if
+    showNote(title, lines)
   end if
 end sub
 
