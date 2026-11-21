@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="PosterItem" extends="Group">
-  <script type="text/brightscript" uri="pkg:/components/PosterItem.brs" />
   <interface>
     <field id="itemContent" type="node" onChange="onContent" />
+    <field id="width" type="float" />
+    <field id="height" type="float" />
   </interface>
+  <script type="text/brightscript" uri="pkg:/components/PosterItem.brs" />
   <children>
+    <Rectangle id="back" width="256" height="144" color="0x1A1A26FF" />
+    <Label id="fallback" translation="[12,10]" width="232" height="124" wrap="true" horizAlign="center" vertAlign="center" font="font:MediumBoldSystemFont" color="0xE6B34AFF" />
     <Poster id="poster" width="256" height="144" loadDisplayMode="scaleToZoom" />
-    <Label id="label" translation="[0,148]" width="256" height="32" color="0xFFFFFFFF" />
+    <Label id="label" translation="[0,150]" width="256" height="30" font="font:SmallSystemFont" color="0xFFFFFFFF" />
   </children>
 </component>
