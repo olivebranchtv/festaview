@@ -25,6 +25,12 @@ sub init()
   m.heroVideo.observeField("state", "onHeroVideoState")
   m.heroTimer = m.top.findNode("heroTimer")
   m.heroTimer.observeField("fire", "onHeroTimer")
+  ' The trailer fades in from dark and fades out to dark (the "curtain") so it never cuts in or out
+  m.heroEnding = false
+  m.heroCurtain = m.top.findNode("heroCurtain")
+  m.curtainUp = m.top.findNode("curtainUp")
+  m.curtainDown = m.top.findNode("curtainDown")
+  m.curtainDown.observeField("state", "onCurtainDownState")
 
   m.player.observeField("state", "onPlayerState")
   m.player.observeField("position", "onPosition")
@@ -240,7 +246,11 @@ sub setHero(item as object, rowTitle as string)
 end sub
 
 sub stopHeroVideo()
+  m.heroEnding = false
   m.heroTimer.control = "stop"
+  m.curtainUp.control = "stop"
+  m.curtainDown.control = "stop"
+  m.heroCurtain.opacity = 0.0
   m.heroVideo.control = "stop"
   m.heroVideo.visible = false
   m.heroHint.visible = false
@@ -294,13 +304,33 @@ end sub
 sub onHeroVideoState()
   s = m.heroVideo.state
   if s = "playing" then
-    m.heroVideo.visible = true
+    ' Re-apply the sound setting now that the trailer is really playing (some Rokus reset it when new content loads).
+    m.heroVideo.mute = m.heroMuted
+    if m.heroVideo.visible <> true then
+      m.heroVideo.visible = true
+      m.curtainDown.control = "stop"
+      m.heroCurtain.opacity = 1.0
+      m.curtainUp.control = "start"
+    end if
     showHeroHint()
-  else if s = "finished" or s = "error" then
-    m.heroVideo.visible = false
+  else if s = "finished" then
+    ' fade to dark, then onCurtainDownState hides the picture and fades the poster back in
+    m.heroEnding = true
     m.heroHint.visible = false
-    m.heroVideo.control = "stop"
+    m.curtainUp.control = "stop"
+    m.curtainDown.control = "start"
+  else if s = "error" then
+    stopHeroVideo()
   end if
+end sub
+
+sub onCurtainDownState()
+  if m.heroEnding <> true then return
+  if m.curtainDown.state <> "stopped" then return
+  m.heroEnding = false
+  m.heroVideo.control = "stop"
+  m.heroVideo.visible = false
+  m.curtainUp.control = "start"
 end sub
 
 sub onItemSelected()

@@ -10,6 +10,8 @@
     <Poster id="heroArt" translation="[0,0]" width="1280" height="410" loadDisplayMode="scaleToZoom" />
     <Video id="heroVideo" translation="[552,0]" width="728" height="410" visible="false" enableUI="false" />
     <Poster id="heroShade" translation="[0,0]" width="1280" height="410" uri="pkg:/images/hero_shade.png" />
+    <Poster id="heroSeam" translation="[352,0]" width="400" height="410" uri="pkg:/images/hero_seam.png" />
+    <Rectangle id="heroCurtain" translation="[552,0]" width="728" height="410" color="0x0B0B12FF" opacity="0.0" />
     <Label id="brand" text="FESTAVIEW" translation="[60,26]" width="500" height="40" font="font:LargeBoldSystemFont" color="0xE6B34AFF" />
     <Label id="tagline" text="Every festival. Every screen." translation="[60,68]" width="600" height="26" font="font:SmallestSystemFont" color="0xBBBBBBFF" />
     <Label id="heroTag" translation="[60,150]" width="800" height="28" font="font:SmallBoldSystemFont" color="0xE6B34AFF" />
@@ -38,6 +40,12 @@
       <Label id="roomHint" text="Press Back to leave the theater" translation="[80,430]" width="1120" height="36" horizAlign="center" color="0x888888FF" />
     </Rectangle>
     <Timer id="heroTimer" repeat="false" duration="1.5" />
+    <Animation id="curtainUp" duration="1.0" easeFunction="inOutQuad" repeat="false">
+      <FloatFieldInterpolator key="[0.0,1.0]" keyValue="[1.0,0.0]" fieldToInterp="heroCurtain.opacity" />
+    </Animation>
+    <Animation id="curtainDown" duration="0.7" easeFunction="inOutQuad" repeat="false">
+      <FloatFieldInterpolator key="[0.0,1.0]" keyValue="[0.0,1.0]" fieldToInterp="heroCurtain.opacity" />
+    </Animation>
     <Timer id="adWatch" repeat="true" duration="1" />
     <Timer id="roomTimer" repeat="true" duration="1" />
   </children>
