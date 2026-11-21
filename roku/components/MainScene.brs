@@ -19,7 +19,9 @@ sub init()
   m.heroMeta = m.top.findNode("heroMeta")
   m.heroDesc = m.top.findNode("heroDesc")
   m.heroVideo = m.top.findNode("heroVideo")
-  m.heroVideo.mute = true
+  m.heroHint = m.top.findNode("heroHint")
+  m.heroMuted = heroMutePref()
+  m.heroVideo.mute = m.heroMuted
   m.heroVideo.observeField("state", "onHeroVideoState")
   m.heroTimer = m.top.findNode("heroTimer")
   m.heroTimer.observeField("fire", "onHeroTimer")
@@ -241,6 +243,36 @@ sub stopHeroVideo()
   m.heroTimer.control = "stop"
   m.heroVideo.control = "stop"
   m.heroVideo.visible = false
+  m.heroHint.visible = false
+end sub
+
+' Trailer sound: on by default. The * (options) button turns it off and on, and the choice is remembered on this Roku.
+function heroMutePref() as boolean
+  sec = CreateObject("roRegistrySection", "festaview")
+  if sec.Exists("hero_mute") then
+    if sec.Read("hero_mute") = "1" then return true
+  end if
+  return false
+end function
+
+sub toggleHeroSound()
+  m.heroMuted = not m.heroMuted
+  sec = CreateObject("roRegistrySection", "festaview")
+  flag = "0"
+  if m.heroMuted then flag = "1"
+  sec.Write("hero_mute", flag)
+  sec.Flush()
+  m.heroVideo.mute = m.heroMuted
+  showHeroHint()
+end sub
+
+sub showHeroHint()
+  if m.heroMuted then
+    m.heroHint.text = "Trailer sound is off. Press * to turn it on."
+  else
+    m.heroHint.text = "Press * to turn the trailer sound off."
+  end if
+  m.heroHint.visible = true
 end sub
 
 ' The viewer rested on a tile: start its trailer (muted) in the hero.
@@ -255,7 +287,7 @@ sub onHeroTimer()
   c.url = trailer
   c.streamFormat = guessFormat(trailer)
   m.heroVideo.content = c
-  m.heroVideo.mute = true
+  m.heroVideo.mute = m.heroMuted
   m.heroVideo.control = "play"
 end sub
 
@@ -263,8 +295,10 @@ sub onHeroVideoState()
   s = m.heroVideo.state
   if s = "playing" then
     m.heroVideo.visible = true
+    showHeroHint()
   else if s = "finished" or s = "error" then
     m.heroVideo.visible = false
+    m.heroHint.visible = false
     m.heroVideo.control = "stop"
   end if
 end sub
@@ -412,6 +446,10 @@ sub closePlayer()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+  if press and key = "options" and m.room = invalid and m.inAd <> true and m.player.visible <> true then
+    toggleHeroSound()
+    return true
+  end if
   if press and key = "back" and m.room <> invalid then
     closeRoom("")
     return true
