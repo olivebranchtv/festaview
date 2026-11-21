@@ -7,7 +7,7 @@ import checkout from './functions/checkout.mjs'
 import webhook from './functions/stripe-webhook.mjs'
 import vstart from './functions/virtual-start.mjs'
 import claim from './functions/claim.mjs'
-import rokuVast, { spotVast, forRoku, hasAd } from './functions/roku-vast.mjs'
+import rokuVast, { spotVast, forRoku, hasAd, adLabel as vastAdLabel } from './functions/roku-vast.mjs'
 import rokuTrack from './functions/roku-track.mjs'
 
 let pass = 0, fail = 0
@@ -311,7 +311,7 @@ ok('ads and trailers are labelled differently', adLabel({ kind: 'ad' }) === 'Adv
 
 // --- Roku ad waterfall: Adtelligent first, our own spots fill the rest
 process.env.ROKU_ADTELLIGENT_TAG = 'https://ads.example/vast?w={w}&h={h}&cb={cb}&tid={tid}&uip={uip}'
-const AD_XML = '<?xml version="1.0"?><VAST version="2.0"><Ad id="1"><InLine><AdSystem>Adt</AdSystem><Impression><![CDATA[https://adt.example/imp]]></Impression></InLine></Ad></VAST>'
+const AD_XML = '<?xml version="1.0"?><VAST version="2.0"><Ad id="1"><InLine><AdSystem>Adt</AdSystem><AdTitle><![CDATA[Sample Adtelligent Ad]]></AdTitle><Impression><![CDATA[https://adt.example/imp]]></Impression></InLine></Ad></VAST>'
 const NOAD_XML = '<?xml version="1.0"?><VAST version="2.0"></VAST>'
 let adtMode = 'ad'
 let spotsData = [
@@ -327,7 +327,7 @@ globalThis.fetch = async (url, opts = {}) => {
     return new Response(adtMode === 'ad' ? AD_XML : NOAD_XML, { status: 200 })
   }
   if (u.pathname.endsWith('/rpc/roku_spots')) return new Response(JSON.stringify(spotsData), { status: 200 })
-  if (u.pathname.endsWith('/rpc/roku_bump_ad') || u.pathname.endsWith('/rpc/roku_log_ad')) { rpcLog.push({ name: u.pathname.split('/').pop(), body: JSON.parse(opts.body) }); return new Response(null, { status: 204 }) }
+  if (u.pathname.endsWith('/rpc/roku_bump_ad') || u.pathname.endsWith('/rpc/roku_log_ad') || u.pathname.endsWith('/rpc/roku_log_serve')) { rpcLog.push({ name: u.pathname.split('/').pop(), body: JSON.parse(opts.body) }); return new Response(null, { status: 204 }) }
   return fetchBeforeRoku(url, opts)
 }
 const getVast = (qs = '') => rokuVast(new Request('https://site.example/.netlify/functions/roku-vast?w=1920&h=1080&cb=1&tid=abc&uip=1.2.3.4' + qs, { method: 'GET' }))
@@ -337,12 +337,26 @@ let rvBody = await rv.text()
 ok('Adtelligent ad is relayed unchanged and is tried first', rv.headers.get('X-Ad-Source') === 'adtelligent' && rvBody === AD_XML && adtCalls.length === 1)
 ok('Adtelligent address gets the device details', adtCalls[0].includes('w=1920') && adtCalls[0].includes('tid=abc') && adtCalls[0].includes('uip=1.2.3.4'))
 ok('slots are counted: asked and filled', rpcLog.some((r) => r.body.p_source === 'adtelligent' && r.body.p_event === 'request') && rpcLog.some((r) => r.body.p_source === 'adtelligent' && r.body.p_event === 'filled'))
+const SERVE_TITLE = '88888888-8888-4888-8888-888888888888'
+rpcLog.length = 0
+await getVast('&title=' + SERVE_TITLE + '&tn=The%20Sparrows%20Nesting')
+ok('an Adtelligent ad is logged against the title it ran on, with its ad name', rpcLog.some((x) => x.name === 'roku_log_serve' && x.body.p_source === 'adtelligent' && x.body.p_title === SERVE_TITLE && x.body.p_title_name === 'The Sparrows Nesting' && x.body.p_label === 'Sample Adtelligent Ad'))
+ok('the ad name falls back to the ad id, then a plain label', vastAdLabel('<Ad id="77"><InLine></InLine></Ad>') === 'Adtelligent ad 77' && vastAdLabel('<VAST></VAST>') === 'Adtelligent ad')
+rpcLog.length = 0
+await getVast()
+ok('an ad with no title is still logged, without a title', rpcLog.some((x) => x.name === 'roku_log_serve' && x.body.p_title === null))
 
 adtMode = 'empty'; rpcLog.length = 0
 rv = await getVast(); rvBody = await rv.text()
 ok('no Adtelligent ad: one of our own spots plays', rv.headers.get('X-Ad-Source') === 'fallback' && rvBody.includes('spot-aaaa') && rvBody.includes('Rodeo Hard'))
 ok('our spot uses the plain mp4 and has no tracking address', rvBody.includes('/play_720p.mp4') && !rvBody.includes('playlist.m3u8') && rvBody.includes('<Impression><![CDATA[]]></Impression>'))
 ok('our spot keeps its click-through link', rvBody.includes('https://rodeohard.com'))
+rpcLog.length = 0
+await getVast('&title=' + SERVE_TITLE + '&tn=Faith%20Family%20Films')
+ok('a house ad is logged against the title with its spot name', rpcLog.some((x) => x.name === 'roku_log_serve' && x.body.p_source === 'house' && x.body.p_label === 'Rodeo Hard' && x.body.p_title === SERVE_TITLE))
+rpcLog.length = 0
+await getVast('&title=not-a-uuid')
+ok('a title that is not an id is not stored as one', rpcLog.some((x) => x.name === 'roku_log_serve' && x.body.p_title === null))
 ok('fallback slot is counted', rpcLog.some((r) => r.body.p_source === 'fallback' && r.body.p_event === 'filled' && r.body.p_spot === 'spot-aaaa'))
 
 adtMode = 'fail'

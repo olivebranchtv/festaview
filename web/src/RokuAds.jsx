@@ -44,11 +44,89 @@ function AdBreaks({ note }) {
   )
 }
 
+const centsText = (c) => { const n = Number(c || 0); return n % 1 === 0 ? String(n) : String(Math.round(n * 1000) / 1000) }
+const dollars = (cents) => { const d = Number(cents || 0) / 100; return '$' + (Math.abs(d) >= 0.1 ? d.toFixed(2) : d.toFixed(3)) }
+
+// What each ad pays, in cents per ad (for now one cent each), and the festival's share of the money.
+function AdRates({ note }) {
+  const [s, setS] = useState(null)
+  useEffect(() => { api.getRokuAdRates().then((r) => setS({ ...r })).catch((e) => note(e.message, true)) }, [note])
+  if (!s) return null
+  const save = async (e) => {
+    e.preventDefault()
+    const a = parseFloat(s.adtelligent_rate_cents), h = parseFloat(s.house_rate_cents), p = parseFloat(s.festival_share_pct)
+    if (!(a >= 0) || !(h >= 0)) { note('Rates must be 0 or more.', true); return }
+    if (!(p >= 0 && p <= 100)) { note('The festival share must be from 0 to 100.', true); return }
+    try { await api.saveRokuAdRates({ adtelligent_rate_cents: a, house_rate_cents: h, festival_share_pct: p }); note('Rates saved. New ads use them from now on; ads already logged keep the rate they had.') } catch (x) { note(x.message, true) }
+  }
+  return (
+    <div className="panel">
+      <h2>What each ad pays</h2>
+      <p className="note">Rates are in cents per ad. They are stamped on each ad when it plays, so changing a rate never rewrites history. A house spot can have its own rate below, otherwise it pays the house rate.</p>
+      <form onSubmit={save}>
+        <div className="two">
+          <label className="field"><span>Adtelligent ads (cents per ad)</span><input value={s.adtelligent_rate_cents} onChange={(e) => setS({ ...s, adtelligent_rate_cents: e.target.value })} inputMode="decimal" /></label>
+          <label className="field"><span>Our own spots, default (cents per ad)</span><input value={s.house_rate_cents} onChange={(e) => setS({ ...s, house_rate_cents: e.target.value })} inputMode="decimal" /></label>
+        </div>
+        <label className="field"><span>Festival share of ad revenue (percent)</span><input value={s.festival_share_pct} onChange={(e) => setS({ ...s, festival_share_pct: e.target.value })} inputMode="decimal" /></label>
+        <button className="btn" type="submit">Save rates</button>
+      </form>
+    </div>
+  )
+}
+
+// Which ads played on which title, by source, with what they earned and the festival's share.
+function AdReport({ note }) {
+  const [days, setDays] = useState(7)
+  const [rows, setRows] = useState(null)
+  useEffect(() => { setRows(null); api.rokuAdReport(days, null).then(setRows).catch((e) => { note(e.message, true); setRows([]) }) }, [days, note])
+  const plays = (rows || []).reduce((a, r) => a + Number(r.plays || 0), 0)
+  const gross = (rows || []).reduce((a, r) => a + Number(r.gross_cents || 0), 0)
+  const share = (rows || []).reduce((a, r) => a + Number(r.festival_cents || 0), 0)
+  return (
+    <div className="panel">
+      <h2>Ads played by title</h2>
+      <p className="note">Every ad handed to a Roku, with the title it ran on, where it came from and the rate it paid. This counts ads delivered to the Roku. It does not confirm that each one was watched to the end.</p>
+      <div className="filters">
+        {[1, 7, 30].map((d) => <button key={d} type="button" className={'btn ghost small' + (days === d ? ' on' : '')} onClick={() => setDays(d)}>{d === 1 ? 'Last 24 hours' : 'Last ' + d + ' days'}</button>)}
+      </div>
+      <div className="kpis">
+        <div className="kpi"><span>Ads played</span><strong>{plays.toLocaleString()}</strong></div>
+        <div className="kpi"><span>Earned</span><strong>{dollars(gross)}</strong></div>
+        <div className="kpi"><span>Festivals' share</span><strong>{dollars(share)}</strong></div>
+      </div>
+      {!rows && <p className="note">Loading...</p>}
+      {rows && rows.length === 0 && <p className="note">No ads have played in this period yet.</p>}
+      {rows && rows.length > 0 && (
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Title</th><th>Festival</th><th>Source</th><th>Ad</th><th>Plays</th><th>Earned</th><th>Festival share</th></tr></thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.title || '(no title)'}</td>
+                  <td>{r.festival_name || '-'}</td>
+                  <td>{r.source === 'adtelligent' ? 'Adtelligent' : 'Our spot'}</td>
+                  <td>{r.ad_label || '-'}</td>
+                  <td>{Number(r.plays).toLocaleString()}</td>
+                  <td>{dollars(r.gross_cents)}</td>
+                  <td>{dollars(r.festival_cents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Network owner: the house ads that fill Roku ad slots when Adtelligent has no ad, and how often Adtelligent fills.
 export default function RokuAds({ note }) {
   const [spots, setSpots] = useState(null)
   const [counts, setCounts] = useState([])
   const [f, setF] = useState({ title: '', video_url: '', click_url: '', duration: '' })
+  const [rateDraft, setRateDraft] = useState({})
 
   const reload = useCallback(async () => {
     try {
@@ -80,6 +158,13 @@ export default function RokuAds({ note }) {
       note('Spot added.'); reload()
     } catch (x) { note(x.message, true) }
   }
+  const saveRate = async (s) => {
+    const raw = rateDraft[s.id]
+    if (raw === undefined) return
+    const v = String(raw).trim() === '' ? null : parseFloat(raw)
+    if (v !== null && !(v >= 0)) { note('A rate must be 0 or more, or empty to use the house rate.', true); return }
+    try { await api.setRokuSpotRate(s.id, v); setRateDraft((d) => { const n = { ...d }; delete n[s.id]; return n }); note(v === null ? 'This spot now uses the house rate.' : 'Rate saved.'); reload() } catch (x) { note(x.message, true) }
+  }
   const toggle = async (s) => { try { await api.setRokuSpotActive(s.id, !s.active); reload() } catch (x) { note(x.message, true) } }
   const remove = async (s) => {
     if (!window.confirm('Delete "' + s.title + '"?')) return
@@ -89,6 +174,8 @@ export default function RokuAds({ note }) {
   return (
     <>
       <AdBreaks note={note} />
+      <AdRates note={note} />
+      <AdReport note={note} />
       <div className="panel">
         <h2>Roku ad waterfall, last 7 days</h2>
         <p className="note">Every ad slot on the Roku app asks Adtelligent first. Our own spots below play only when Adtelligent has no ad. Until the Adtelligent tag is set on the website (Netlify setting ROKU_ADTELLIGENT_TAG), every slot plays one of our own spots.</p>
@@ -107,6 +194,8 @@ export default function RokuAds({ note }) {
           {spots.map((s) => (
             <li key={s.id}>
               <div><strong>{s.title}</strong><small>{s.duration_seconds} seconds | played {spotFills(s.id).toLocaleString()} times in 7 days{s.click_url ? ' | ' + s.click_url : ''}</small></div>
+              <input value={rateDraft[s.id] !== undefined ? rateDraft[s.id] : s.rate_cents == null ? '' : centsText(s.rate_cents)} onChange={(e) => setRateDraft({ ...rateDraft, [s.id]: e.target.value })} placeholder="house rate" inputMode="decimal" aria-label={'Rate in cents for ' + s.title} style={{ width: '6rem' }} />
+              <button type="button" className="btn ghost small" onClick={() => saveRate(s)} disabled={rateDraft[s.id] === undefined}>Save rate</button>
               <span className={'pill ' + (s.active ? 'published' : 'draft')}>{s.active ? 'on' : 'off'}</span>
               <button type="button" className="btn ghost small" onClick={() => toggle(s)}>{s.active ? 'Turn off' : 'Turn on'}</button>
               <button type="button" className="btn ghost small danger" onClick={() => remove(s)}>Delete</button>

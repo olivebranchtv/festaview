@@ -700,3 +700,24 @@ export async function saveRokuAdSettings(s) {
   })
   if (r.error) throw r.error
 }
+
+// ---- Roku ad rates and the plays-by-title report ----
+export async function getRokuAdRates() {
+  const r = await supabase.from('roku_ad_rates').select('*').eq('id', 1)
+  if (r.error) throw r.error
+  return (r.data && r.data[0]) || { adtelligent_rate_cents: 1, house_rate_cents: 1, festival_share_pct: 80 }
+}
+export async function saveRokuAdRates(s) {
+  const r = await supabase.from('roku_ad_rates').upsert({ id: 1, adtelligent_rate_cents: s.adtelligent_rate_cents, house_rate_cents: s.house_rate_cents, festival_share_pct: s.festival_share_pct, updated_at: new Date().toISOString() })
+  if (r.error) throw r.error
+}
+export async function setRokuSpotRate(id, rateCents) {
+  const r = await supabase.from('roku_fallback_spots').update({ rate_cents: rateCents }).eq('id', id)
+  if (r.error) throw r.error
+}
+// Which ads played on which title. Leave festivalId empty for every festival (network owner only).
+export async function rokuAdReport(days, festivalId) {
+  const r = await supabase.rpc('roku_ad_report', { p_days: days, p_festival: festivalId || null })
+  if (r.error) throw r.error
+  return r.data || []
+}

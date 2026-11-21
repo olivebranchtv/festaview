@@ -39,6 +39,15 @@ async function rpc(name, args, ms) {
   } catch { return null } finally { clearTimeout(t) }
 }
 
+// A short name for an Adtelligent ad, taken from its VAST reply (the ad title, otherwise the ad id).
+export function adLabel(xmlText) {
+  const t = /<AdTitle[^>]*>\s*(?:<!\[CDATA\[)?([^\]<]*)/i.exec(xmlText)
+  if (t && t[1].trim()) return t[1].trim().slice(0, 120)
+  const id = /<Ad[^>]*\sid="([^"]*)"/i.exec(xmlText)
+  if (id && id[1]) return 'Adtelligent ad ' + id[1].slice(0, 80)
+  return 'Adtelligent ad'
+}
+
 // The ad for one of our own spots. No Impression address and no tracking events (see the note at the top).
 export function spotVast(sp) {
   if (!/^https:\/\//i.test(sp.video_url || '')) return null
@@ -59,6 +68,11 @@ export default async (req) => {
   const tagTemplate = process.env.ROKU_ADTELLIGENT_TAG || ''
   // For ?debug=1 only: did we ask Adtelligent, and what did it say?
   let adt = q.get('force') === 'fallback' ? 'skipped' : /^https:\/\//i.test(tagTemplate) ? 'asked' : 'tag not set'
+  // Which title this ad is for: the Roku app adds ?title=<id>&tn=<name> to every ad request. Each ad handed out is logged against that title,
+  // with its source (Adtelligent or our own spot), which ad it was, and the rate it pays (see roku_log_serve in migration 023).
+  const titleId = /^[0-9a-f-]{36}$/i.test(q.get('title') || '') ? q.get('title') : null
+  const titleName = (q.get('tn') || '').slice(0, 200)
+  const logServe = (source, label, spotId) => { if (!debug) pending.push(rpc('roku_log_serve', { p_title: titleId, p_title_name: titleName, p_source: source, p_label: label, p_spot: spotId || null }, 1000)) }
 
   // 1) Adtelligent first (only when the Festaview tag has been set)
   if (q.get('force') !== 'fallback' && /^https:\/\//i.test(tagTemplate)) {
@@ -72,7 +86,7 @@ export default async (req) => {
     adt = filled ? 'filled' : r.body ? 'no ads available' : 'no answer (status ' + r.status + ')'
     // Log line: result and size only, no addresses or device ids.
     console.log(JSON.stringify({ src: 'adtelligent', status: r.status, bytes: r.body ? r.body.length : 0, hasAd: filled, ms: Date.now() - started }))
-    if (filled) { tally('adtelligent', '', 'filled'); return done(debug ? xml('<debug>adtelligent</debug>') : xml(r.body, { 'X-Ad-Source': 'adtelligent' })) }
+    if (filled) { tally('adtelligent', '', 'filled'); logServe('adtelligent', adLabel(r.body)); return done(debug ? xml('<debug>adtelligent</debug>') : xml(r.body, { 'X-Ad-Source': 'adtelligent' })) }
   }
 
   // 2) One of our own spots
@@ -82,6 +96,7 @@ export default async (req) => {
       const vast = spotVast(sp); if (!vast) continue
       console.log(JSON.stringify({ src: 'fallback', spot: 'spot-' + sp.id }))
       tally('fallback', 'spot-' + sp.id, 'filled')
+      logServe('house', sp.title || 'spot-' + sp.id, /^[0-9a-f-]{36}$/i.test(String(sp.id)) ? sp.id : null)
       return done(debug ? xml('<debug>fallback: ' + sp.title + ' | adtelligent: ' + adt + '</debug>') : xml(vast, { 'X-Ad-Source': 'fallback' }))
     }
   }
