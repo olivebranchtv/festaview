@@ -18,7 +18,6 @@ function postRpcText(name as string, body as object) as string
   req.SetCertificatesFile("common:/certs/ca-bundle.crt")
   req.AddHeader("apikey", cfg.supabaseAnonKey)
   req.AddHeader("Content-Type", "application/json")
-  req.RetrieveBodyOnError(true)
   req.SetUrl(cfg.supabaseUrl + "/rest/v1/rpc/" + name)
   if not req.AsyncPostFromString(FormatJson(body)) then return ""
   msg = wait(15000, port)
