@@ -27,6 +27,8 @@ sub init()
   m.heroTimer.observeField("fire", "onHeroTimer")
   ' The trailer fades in from dark and fades out to dark (the "curtain") so it never cuts in or out
   m.heroEnding = false
+  m.heroTrailer = invalid
+  m.heroTried = ""
   m.heroCurtain = m.top.findNode("heroCurtain")
   m.curtainUp = m.top.findNode("curtainUp")
   m.curtainDown = m.top.findNode("curtainDown")
@@ -229,6 +231,37 @@ sub refreshHero()
   if trailer = invalid then return
   if trailer = "" then return
   if m.room <> invalid or m.inAd = true or m.player.visible = true then return
+  startHeroPrebuffer(trailer)
+end sub
+
+' Trailers start faster this way: the moment a tile is highlighted the trailer starts loading in the background, and it plays when the
+' short pause ends. Bunny keeps a small ready-made MP4 next to every playlist, which starts much faster than the streaming playlist
+' (the playlist is used only if that MP4 is missing).
+function trailerMp4(url as string) as string
+  re = CreateObject("roRegex", "^(https://[^ ]+\.b-cdn\.net/[0-9a-f-]+)/playlist\.m3u8$", "i")
+  parts = re.Match(url)
+  if parts.Count() > 1 then return parts[1] + "/play_480p.mp4"
+  return ""
+end function
+
+sub loadHeroContent(src as string)
+  c = CreateObject("roSGNode", "ContentNode")
+  c.url = src
+  c.streamFormat = guessFormat(src)
+  m.heroVideo.content = c
+  m.heroVideo.mute = m.heroMuted
+end sub
+
+sub startHeroPrebuffer(trailer as string)
+  m.heroTrailer = trailer
+  m.heroTried = "mp4"
+  src = trailerMp4(trailer)
+  if src = "" then
+    m.heroTried = "hls"
+    src = trailer
+  end if
+  loadHeroContent(src)
+  m.heroVideo.control = "prebuffer"
   m.heroTimer.control = "start"
 end sub
 
@@ -246,6 +279,7 @@ sub setHero(item as object, rowTitle as string)
 end sub
 
 sub stopHeroVideo()
+  m.heroTrailer = invalid
   m.heroEnding = false
   m.heroTimer.control = "stop"
   m.curtainUp.control = "stop"
@@ -288,15 +322,7 @@ end sub
 ' The viewer rested on a tile: start its trailer (muted) in the hero.
 sub onHeroTimer()
   if m.room <> invalid or m.inAd = true or m.player.visible = true then return
-  info = focusedRowInfo()
-  if info = invalid then return
-  trailer = info.item.trailerUrl
-  if trailer = invalid then return
-  if trailer = "" then return
-  c = CreateObject("roSGNode", "ContentNode")
-  c.url = trailer
-  c.streamFormat = guessFormat(trailer)
-  m.heroVideo.content = c
+  if m.heroTrailer = invalid then return
   m.heroVideo.mute = m.heroMuted
   m.heroVideo.control = "play"
 end sub
@@ -320,7 +346,14 @@ sub onHeroVideoState()
     m.curtainUp.control = "stop"
     m.curtainDown.control = "start"
   else if s = "error" then
-    stopHeroVideo()
+    ' If the quick MP4 was not available for this trailer, try the streaming playlist once before giving up.
+    if m.heroTried = "mp4" and m.heroTrailer <> invalid then
+      m.heroTried = "hls"
+      loadHeroContent(m.heroTrailer)
+      m.heroVideo.control = "play"
+    else
+      stopHeroVideo()
+    end if
   end if
 end sub
 

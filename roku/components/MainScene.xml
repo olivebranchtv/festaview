@@ -39,7 +39,7 @@
       <Label id="roomLine" text="" translation="[80,340]" width="1120" height="50" horizAlign="center" color="0xFFFFFFFF" />
       <Label id="roomHint" text="Press Back to leave the theater" translation="[80,430]" width="1120" height="36" horizAlign="center" color="0x888888FF" />
     </Rectangle>
-    <Timer id="heroTimer" repeat="false" duration="1.5" />
+    <Timer id="heroTimer" repeat="false" duration="0.8" />
     <Animation id="curtainUp" duration="1.0" easeFunction="inOutQuad" repeat="false">
       <FloatFieldInterpolator key="[0.0,1.0]" keyValue="[1.0,0.0]" fieldToInterp="heroCurtain.opacity" />
     </Animation>
