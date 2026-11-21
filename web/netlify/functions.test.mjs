@@ -7,7 +7,7 @@ import checkout from './functions/checkout.mjs'
 import webhook from './functions/stripe-webhook.mjs'
 import vstart from './functions/virtual-start.mjs'
 import claim from './functions/claim.mjs'
-import rokuVast, { spotVast, forRoku, hasAd, adLabel as vastAdLabel, deviceKey } from './functions/roku-vast.mjs'
+import rokuVast, { spotVast, forRoku, hasAd, adLabel as vastAdLabel, deviceKey, festaviewTag } from './functions/roku-vast.mjs'
 import rokuTrack from './functions/roku-track.mjs'
 
 let pass = 0, fail = 0
@@ -416,6 +416,19 @@ ok('debug says the Adtelligent tag is not set', rvBody.includes('adtelligent: ta
 process.env.ROKU_ADTELLIGENT_TAG = savedTag
 rv = await getVast('&debug=1'); rvBody = await rv.text()
 ok('debug says Adtelligent had no ads when it answered empty', rvBody.includes('adtelligent: no ads available'))
+// --- Festaview only ever sends its own name to Adtelligent
+ok('the app name is added when the tag has none', festaviewTag('https://a.example/?aid=1') === 'https://a.example/?aid=1&app_name=festaview' && festaviewTag('https://a.example/x') === 'https://a.example/x?app_name=festaview')
+ok('a tag that already names festaview is kept, in any letter case', festaviewTag('https://a.example/?app_name=Festaview&aid=1') === 'https://a.example/?app_name=Festaview&aid=1')
+ok('a tag for another app, a non-https tag or an empty tag gives nothing to send', festaviewTag('https://a.example/?app_name=quanio&aid=1') === '' && festaviewTag('http://a.example/?app_name=festaview') === '' && festaviewTag('') === '')
+adtCalls.length = 0
+await getVast()
+ok('every request to Adtelligent carries app_name=festaview', adtCalls.length === 1 && adtCalls[0].includes('app_name=festaview'))
+const keepTag = process.env.ROKU_ADTELLIGENT_TAG
+process.env.ROKU_ADTELLIGENT_TAG = 'https://ads.example/vast?app_name=quanio&w={w}'
+adtCalls.length = 0
+rv = await getVast('&debug=1'); rvBody = await rv.text()
+ok('a tag for another app is never sent to Adtelligent, and our own spots play instead', adtCalls.length === 0 && rvBody.includes('tag is for a different app') && rvBody.startsWith('<debug>fallback'))
+process.env.ROKU_ADTELLIGENT_TAG = keepTag
 ok('the Roku conversion only touches Bunny playlist links', forRoku('https://other.example/a/playlist.m3u8') === 'https://other.example/a/playlist.m3u8' && forRoku('https://z.b-cdn.net/0f-1/playlist.m3u8') === 'https://z.b-cdn.net/0f-1/play_720p.mp4')
 
 // --- Roku ad reports go to the database against the title that was playing

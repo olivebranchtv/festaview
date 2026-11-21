@@ -60,6 +60,19 @@ export function adLabel(xmlText) {
   return 'Adtelligent ad'
 }
 
+// Every Adtelligent request from this function is for Festaview and carries app_name=festaview. If the tag has no app name, it is added.
+// If the tag names a different app (for example another channel's tag pasted in by mistake), this returns '' and nothing is sent.
+export const APP_NAME = 'festaview'
+export function festaviewTag(tag) {
+  const t = String(tag || '').trim()
+  if (!/^https:\/\//i.test(t)) return ''
+  const m = /[?&]app_name=([^&#]*)/i.exec(t)
+  if (!m) return t + (t.includes('?') ? '&' : '?') + 'app_name=' + APP_NAME
+  let name = m[1]
+  try { name = decodeURIComponent(name) } catch { /* keep as is */ }
+  return name.trim().toLowerCase() === APP_NAME ? t : ''
+}
+
 // The ad for one of our own spots. No Impression address and no tracking events (see the note at the top).
 export function spotVast(sp) {
   if (!/^https:\/\//i.test(sp.video_url || '')) return null
@@ -77,9 +90,12 @@ export default async (req) => {
   const tally = (source, spot, ev) => { if (!debug) pending.push(rpc('roku_bump_ad', { p_source: source, p_spot: spot, p_event: ev }, 1000)) }
   const done = async (res) => { await Promise.allSettled(pending); return res }
   const enc = (v, d = '') => encodeURIComponent(v || d)
-  const tagTemplate = process.env.ROKU_ADTELLIGENT_TAG || ''
+  const rawTag = process.env.ROKU_ADTELLIGENT_TAG || ''
+  // Festaview's requests must always carry Festaview's name: a tag with no app name gets app_name=festaview added, and a tag that names
+  // any other app is refused (no request is sent) so another channel's traffic can never be counted as Festaview's.
+  const tagTemplate = festaviewTag(rawTag)
   // For ?debug=1 only: did we ask Adtelligent, and what did it say?
-  let adt = q.get('force') === 'fallback' ? 'skipped' : /^https:\/\//i.test(tagTemplate) ? 'asked' : 'tag not set'
+  let adt = q.get('force') === 'fallback' ? 'skipped' : tagTemplate ? 'asked' : rawTag ? 'tag is for a different app, not sent' : 'tag not set'
   // Which title this ad is for: the Roku app adds ?title=<id>&tn=<name> to every ad request. Each ad handed out is logged against that title,
   // with its source (Adtelligent or our own spot), which ad it was, and the rate it pays (see roku_log_serve in migration 023).
   const titleId = /^[0-9a-f-]{36}$/i.test(q.get('title') || '') ? q.get('title') : null
