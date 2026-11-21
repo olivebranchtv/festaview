@@ -10,6 +10,20 @@ sub init()
   m.status = m.top.findNode("status")
   m.player = m.top.findNode("player")
   m.rows.observeField("rowItemSelected", "onItemSelected")
+  m.rows.observeField("rowItemFocused", "onRowFocus")
+
+  ' Hero banner: shows the highlighted tile, and plays its trailer (muted) after a short pause
+  m.heroArt = m.top.findNode("heroArt")
+  m.heroTag = m.top.findNode("heroTag")
+  m.heroTitle = m.top.findNode("heroTitle")
+  m.heroMeta = m.top.findNode("heroMeta")
+  m.heroDesc = m.top.findNode("heroDesc")
+  m.heroVideo = m.top.findNode("heroVideo")
+  m.heroVideo.mute = true
+  m.heroVideo.observeField("state", "onHeroVideoState")
+  m.heroTimer = m.top.findNode("heroTimer")
+  m.heroTimer.observeField("fire", "onHeroTimer")
+
   m.player.observeField("state", "onPlayerState")
   m.player.observeField("position", "onPosition")
   m.channels = []
@@ -70,8 +84,19 @@ sub onFeedResult()
       cur = ch.items[n.index]
       gitem = guide.CreateChild("ContentNode")
       gitem.title = "Ch " + StrI(ch.number) + "  " + ch.name
-      gitem.description = cur.title
       gitem.hdPosterUrl = cur.poster
+      ' What is on right now: its synopsis and trailer feed the hero banner
+      onNow = findFilm(data.films, cur.filmId)
+      trailer = ""
+      synopsis = "A festival channel that plays all day. Press OK to tune in."
+      if onNow <> invalid then
+        trailer = valueOr(onNow.trailer_url, "")
+        syn = valueOr(onNow.synopsis, "")
+        if syn <> "" then synopsis = syn
+      end if
+      gitem.description = synopsis
+      gitem.shortDescriptionLine1 = "Now playing: " + cur.title
+      gitem.addFields({ trailerUrl: trailer })
     end for
   end if
 
@@ -86,6 +111,7 @@ sub onFeedResult()
     for each f in live
       item = row.CreateChild("ContentNode")
       item.title = f.name
+      item.shortDescriptionLine1 = "Live now"
       item.addFields({ festivalId: f.festival_id, liveId: f.id })
       item.hdPosterUrl = valueOr(f.poster_url, "")
       item.url = valueOr(f.stream_url, "")
@@ -102,7 +128,8 @@ sub onFeedResult()
       if film.festival_id = fest.id and film.access <> "ticketed" then
         item = row.CreateChild("ContentNode")
         item.title = film.title
-        item.addFields({ festivalId: film.festival_id, filmId: film.id })
+        item.addFields({ festivalId: film.festival_id, filmId: film.id, trailerUrl: valueOr(film.trailer_url, "") })
+        item.shortDescriptionLine1 = filmMeta(film)
         item.description = valueOr(film.synopsis, "")
         item.hdPosterUrl = valueOr(film.poster_url, "")
         item.url = valueOr(film.video_url, "")
@@ -122,6 +149,103 @@ sub onFeedResult()
   m.rows.content = root
   m.rows.visible = true
   m.rows.setFocus(true)
+  onRowFocus()
+end sub
+
+' ---- hero banner: the highlighted tile, with its trailer playing muted after a short pause ----
+function findFilm(films as object, id as dynamic) as dynamic
+  if id = invalid then return invalid
+  for each f in films
+    if f.id = id then return f
+  end for
+  return invalid
+end function
+
+function filmMeta(film as object) as string
+  parts = []
+  d = valueOr(film.director, "")
+  if d <> "" then parts.Push(d)
+  rt = numToInt(film.runtime_min)
+  if rt > 0 then
+    rts = rt.ToStr()
+    parts.Push(rts + " min")
+  end if
+  g = valueOr(film.genre, "")
+  if g <> "" then parts.Push(g)
+  out = ""
+  for i = 0 to parts.Count() - 1
+    if i > 0 then out = out + "  |  "
+    out = out + parts[i]
+  end for
+  return out
+end function
+
+function focusedRowInfo() as dynamic
+  idx = m.rows.rowItemFocused
+  if idx = invalid then return invalid
+  if m.rows.content = invalid then return invalid
+  rowNode = m.rows.content.GetChild(idx[0])
+  if rowNode = invalid then return invalid
+  item = rowNode.GetChild(idx[1])
+  if item = invalid then return invalid
+  return { item: item, rowTitle: rowNode.title }
+end function
+
+sub onRowFocus()
+  stopHeroVideo()
+  info = focusedRowInfo()
+  if info = invalid then return
+  setHero(info.item, info.rowTitle)
+  trailer = info.item.trailerUrl
+  if trailer = invalid then return
+  if trailer = "" then return
+  if m.room <> invalid or m.inAd = true or m.player.visible = true then return
+  m.heroTimer.control = "start"
+end sub
+
+sub setHero(item as object, rowTitle as string)
+  tag = UCase(rowTitle)
+  if rowTitle = "Festaview Cinemas" then tag = "NOW SHOWING AT FESTAVIEW CINEMAS"
+  if rowTitle = "TV Guide" then tag = "ON NOW  |  TV GUIDE"
+  m.heroTag.text = tag
+  m.heroTitle.text = valueOr(item.title, "")
+  m.heroMeta.text = valueOr(item.shortDescriptionLine1, "")
+  desc = valueOr(item.description, "")
+  if Len(desc) > 230 then desc = Left(desc, 227) + "..."
+  m.heroDesc.text = desc
+  m.heroArt.uri = valueOr(item.hdPosterUrl, "")
+end sub
+
+sub stopHeroVideo()
+  m.heroTimer.control = "stop"
+  m.heroVideo.control = "stop"
+  m.heroVideo.visible = false
+end sub
+
+' The viewer rested on a tile: start its trailer (muted) in the hero.
+sub onHeroTimer()
+  if m.room <> invalid or m.inAd = true or m.player.visible = true then return
+  info = focusedRowInfo()
+  if info = invalid then return
+  trailer = info.item.trailerUrl
+  if trailer = invalid then return
+  if trailer = "" then return
+  c = CreateObject("roSGNode", "ContentNode")
+  c.url = trailer
+  c.streamFormat = guessFormat(trailer)
+  m.heroVideo.content = c
+  m.heroVideo.mute = true
+  m.heroVideo.control = "play"
+end sub
+
+sub onHeroVideoState()
+  s = m.heroVideo.state
+  if s = "playing" then
+    m.heroVideo.visible = true
+  else if s = "finished" or s = "error" then
+    m.heroVideo.visible = false
+    m.heroVideo.control = "stop"
+  end if
 end sub
 
 sub onItemSelected()
@@ -263,6 +387,7 @@ sub closePlayer()
   m.player.control = "stop"
   m.player.visible = false
   m.rows.setFocus(true)
+  onRowFocus()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean

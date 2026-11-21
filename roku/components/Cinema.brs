@@ -109,7 +109,8 @@ sub addCinemaRow(root as object, showings as dynamic)
         if cents > 0 then priceText = priceText + "." + twoDigits(cents)
         priceText = priceText + " ticket"
       end if
-      item.description = valueOr(s.screen_name, "Screen") + "  |  " + showTimeText(startSec) + "  |  " + priceText
+      item.shortDescriptionLine1 = valueOr(s.screen_name, "Screen") + "  |  " + showTimeText(startSec) + "  |  " + priceText
+      item.description = valueOr(s.description, "")
       item.addFields({ showingId: s.id, startSec: startSec, endSec: endSec, priceCents: price })
       shown = shown + 1
     end if
@@ -120,6 +121,7 @@ end sub
 sub openShowing(item as object)
   if m.cinemaTask <> invalid then return
   if m.room <> invalid then return
+  stopHeroVideo()
   code = ""
   if item.priceCents > 0 then
     code = savedTicket(item.showingId)
@@ -356,6 +358,7 @@ sub closeRoom(message as string)
   hideRoomCard()
   m.room = invalid
   m.rows.setFocus(true)
+  onRowFocus()
   if message <> "" then showNote("Festaview Cinemas", [message])
 end sub
 

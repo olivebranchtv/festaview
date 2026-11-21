@@ -8,6 +8,8 @@
 
 ' after = what to do when the ads are done: { kind: "item", item: node } | { kind: "channel", ch: channel } | { kind: "room" }
 sub runAdThen(after as object, count as integer, phase as string, titleId as dynamic, titleName as dynamic)
+  ' Only one video can play at a time: stop the hero trailer before anything else starts.
+  stopHeroVideo()
   vast = FestaviewConfig().vastUrl
   if vast = invalid or vast = "" then
     runAfterAd(after)

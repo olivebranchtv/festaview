@@ -7,28 +7,36 @@
   <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
   <children>
     <Rectangle width="1280" height="720" color="0x0B0B12FF" />
-    <Label id="brand" text="FESTAVIEW" translation="[60,28]" width="600" height="48" color="0xE6B34AFF" />
-    <Label id="tagline" text="Every festival. Every screen." translation="[60,74]" width="700" height="28" color="0xAAAAAAFF" />
+    <Poster id="heroArt" translation="[0,0]" width="1280" height="410" loadDisplayMode="scaleToZoom" />
+    <Video id="heroVideo" translation="[552,0]" width="728" height="410" visible="false" enableUI="false" />
+    <Poster id="heroShade" translation="[0,0]" width="1280" height="410" uri="pkg:/images/hero_shade.png" />
+    <Label id="brand" text="FESTAVIEW" translation="[60,26]" width="500" height="40" font="font:LargeBoldSystemFont" color="0xE6B34AFF" />
+    <Label id="tagline" text="Every festival. Every screen." translation="[60,68]" width="600" height="26" font="font:SmallestSystemFont" color="0xBBBBBBFF" />
+    <Label id="heroTag" translation="[60,150]" width="800" height="28" font="font:SmallBoldSystemFont" color="0xE6B34AFF" />
+    <Label id="heroTitle" translation="[60,182]" width="800" height="56" font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />
+    <Label id="heroMeta" translation="[60,244]" width="800" height="30" font="font:SmallSystemFont" color="0xDDDDDDFF" />
+    <Label id="heroDesc" translation="[60,282]" width="640" height="96" wrap="true" lineSpacing="2" font="font:SmallestSystemFont" color="0xCCCCCCFF" />
     <RowList
       id="rows"
-      translation="[40,130]"
+      translation="[40,420]"
       itemComponentName="PosterItem"
-      itemSize="[1200,236]"
+      itemSize="[1200,240]"
       rowItemSize="[[256,180]]"
       rowItemSpacing="[[16,0]]"
-      numRows="2"
+      numRows="1"
       rowLabelOffset="[[20,10]]"
       showRowLabel="[true]"
       focusXOffset="[20]"
       rowFocusAnimationStyle="floatingFocus"
       visible="false" />
-    <Label id="status" text="Loading festivals..." translation="[60,340]" width="1100" height="40" color="0xFFFFFFFF" />
+    <Label id="status" text="Loading festivals..." translation="[60,440]" width="1100" height="40" color="0xFFFFFFFF" />
     <Video id="player" width="1280" height="720" visible="false" />
     <Rectangle id="roomCard" width="1280" height="720" color="0x0B0B12F2" visible="false">
       <Label id="roomTitle" text="" translation="[80,250]" width="1120" height="70" horizAlign="center" color="0xE6B34AFF" />
       <Label id="roomLine" text="" translation="[80,340]" width="1120" height="50" horizAlign="center" color="0xFFFFFFFF" />
       <Label id="roomHint" text="Press Back to leave the theater" translation="[80,430]" width="1120" height="36" horizAlign="center" color="0x888888FF" />
     </Rectangle>
+    <Timer id="heroTimer" repeat="false" duration="1.5" />
     <Timer id="adWatch" repeat="true" duration="1" />
     <Timer id="roomTimer" repeat="true" duration="1" />
   </children>
