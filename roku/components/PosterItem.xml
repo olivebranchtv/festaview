@@ -7,9 +7,9 @@
   </interface>
   <script type="text/brightscript" uri="pkg:/components/PosterItem.brs" />
   <children>
-    <Rectangle id="back" width="256" height="144" color="0x1A1A26FF" />
-    <Label id="fallback" translation="[12,10]" width="232" height="124" wrap="true" horizAlign="center" vertAlign="center" font="font:MediumBoldSystemFont" color="0xE6B34AFF" />
-    <Poster id="poster" width="256" height="144" loadDisplayMode="scaleToZoom" />
-    <Label id="label" translation="[0,150]" width="256" height="30" font="font:SmallSystemFont" color="0xFFFFFFFF" />
+    <Rectangle id="back" width="256" height="136" color="0x1A1A26FF" />
+    <Label id="fallback" translation="[12,8]" width="232" height="120" wrap="true" horizAlign="center" vertAlign="center" font="font:MediumBoldSystemFont" color="0xE6B34AFF" />
+    <Poster id="poster" width="256" height="136" loadDisplayMode="scaleToZoom" />
+    <Label id="label" translation="[4,140]" width="248" height="36" vertAlign="center" font="font:SmallSystemFont" color="0xFFFFFFFF" />
   </children>
 </component>

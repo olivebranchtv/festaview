@@ -3,6 +3,9 @@
 ' SceneAds.brs decides when an ad pod runs; Config.brs holds the ad address (the roku-vast waterfall on the website).
 
 sub init()
+  ' The Roku's default scene background is blue; use Festaview's dark colour instead.
+  m.top.backgroundURI = ""
+  m.top.backgroundColor = "0x0B0B12FF"
   m.rows = m.top.findNode("rows")
   m.status = m.top.findNode("status")
   m.player = m.top.findNode("player")
