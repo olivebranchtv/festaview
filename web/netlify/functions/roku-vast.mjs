@@ -11,7 +11,7 @@
 // the festival revenue share is worked out from those reports, so our own house ads must not count there. Slots are counted here instead.
 // ?debug=1 shows which path was taken without counting; add &force=fallback to skip Adtelligent.
 //
-// Adtelligent tag: set ROKU_ADTELLIGENT_TAG in the Netlify environment (never put the zone or channel id in the code). It is the full
+// Adtelligent tag: ROKU_ADTELLIGENT_TAG is set in the Netlify environment (production, functions and runtime scopes); never put the zone or channel id in the code. It is the full
 // Adtelligent address with these placeholders: {w} {h} {cb} {ua} {uip} {model} {store} {tid}. Until it is set, every slot goes straight to our own spots.
 
 import { createHash } from 'node:crypto'
