@@ -34,5 +34,8 @@ sub fetchFeed()
   ' Festaview Cinemas: what is playing on each screen (public view; an error from the server comes back as an object, so check the type).
   cinema = httpGetJson("cinema_board?select=*&order=starts_at.asc")
   if type(cinema) <> "roArray" then cinema = []
-  m.top.result = { festivals: festivals, films: films, feeds: feeds, cinema: cinema }
+  ' Ad break settings (set in the Festaview admin, so they change without resending the channel). Empty if the table is not there yet.
+  adsettings = httpGetJson("roku_ad_settings?select=*&id=eq.1")
+  if type(adsettings) <> "roArray" then adsettings = []
+  m.top.result = { festivals: festivals, films: films, feeds: feeds, cinema: cinema, adsettings: adsettings }
 end sub

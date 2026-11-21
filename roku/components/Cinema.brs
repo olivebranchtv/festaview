@@ -250,7 +250,7 @@ sub enterRoom(info as object)
   m.roomTimer.control = "start"
   ' Doors open early: a sponsor ad pod plays while there is plenty of time before showtime.
   if roomNowSec() + 40 < room.startSec then
-    runAdThen({ kind: "room" }, 2, "lobby", room.showingId, room.title)
+    runAdThen({ kind: "room" }, m.adCfg.lobby, "lobby", room.showingId, room.title)
   else
     onRoomTick()
   end if

@@ -1,6 +1,49 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as api from './adminData.js'
 
+// How many ads play on the Roku, and when. The Roku reads this each time the channel opens, so there is nothing to rebuild or resend.
+function AdBreaks({ note }) {
+  const [s, setS] = useState(null)
+  useEffect(() => { api.getRokuAdSettings().then((r) => setS({ ...r })).catch((e) => note(e.message, true)) }, [note])
+  if (!s) return null
+  const field = (key, label, hint, min, max) => (
+    <label className="field">
+      <span>{label}</span>
+      <input value={s[key]} onChange={(e) => setS({ ...s, [key]: e.target.value })} inputMode="numeric" aria-label={label} />
+      <small>{hint} ({min} to {max})</small>
+    </label>
+  )
+  const save = async (e) => {
+    e.preventDefault()
+    const spec = [['preroll_count', 'Ads before a film', 0, 10], ['midroll_count', 'Midroll breaks', 0, 10], ['midroll_interval_minutes', 'Minutes between breaks', 1, 120], ['midroll_ads_per_break', 'Ads in each midroll break', 1, 6], ['lobby_count', 'Lobby ads', 0, 6]]
+    const out = {}
+    for (const [k, label, min, max] of spec) {
+      const n = parseInt(s[k], 10)
+      if (!(n >= min && n <= max)) { note(label + ' must be a number from ' + min + ' to ' + max + '.', true); return }
+      out[k] = n
+    }
+    try { await api.saveRokuAdSettings(out); note('Ad breaks saved. Rokus pick them up the next time the channel opens.') } catch (x) { note(x.message, true) }
+  }
+  return (
+    <div className="panel">
+      <h2>Ad breaks on Roku</h2>
+      <p className="note">These apply to every Roku the next time its Festaview channel is opened. Nothing to rebuild or resend. Midroll breaks play only during films you choose from a row, not during live channels, the TV Guide or a Festaview Cinemas showing (everyone watches those in step, so ads there play in the lobby before showtime).</p>
+      <form onSubmit={save}>
+        <div className="two">
+          {field('preroll_count', 'Ads before a film', 'Played before a film, live channel or TV Guide channel starts', 0, 10)}
+          {field('lobby_count', 'Lobby ads', 'Played in the Festaview Cinemas lobby before showtime, if there is time', 0, 6)}
+        </div>
+        <div className="two">
+          {field('midroll_count', 'Midroll breaks', 'How many breaks during one film', 0, 10)}
+          {field('midroll_interval_minutes', 'Minutes between breaks', 'The first break comes after this many minutes of watching', 1, 120)}
+        </div>
+        {field('midroll_ads_per_break', 'Ads in each midroll break', 'How many ads play in one break', 1, 6)}
+        <button className="btn" type="submit">Save ad breaks</button>
+      </form>
+    </div>
+  )
+}
+
 // Network owner: the house ads that fill Roku ad slots when Adtelligent has no ad, and how often Adtelligent fills.
 export default function RokuAds({ note }) {
   const [spots, setSpots] = useState(null)
@@ -45,6 +88,7 @@ export default function RokuAds({ note }) {
 
   return (
     <>
+      <AdBreaks note={note} />
       <div className="panel">
         <h2>Roku ad waterfall, last 7 days</h2>
         <p className="note">Every ad slot on the Roku app asks Adtelligent first. Our own spots below play only when Adtelligent has no ad. Until the Adtelligent tag is set on the website (Netlify setting ROKU_ADTELLIGENT_TAG), every slot plays one of our own spots.</p>

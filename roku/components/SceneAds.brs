@@ -11,7 +11,8 @@ sub runAdThen(after as object, count as integer, phase as string, titleId as dyn
   ' Only one video can play at a time: stop the hero trailer before anything else starts.
   stopHeroVideo()
   vast = FestaviewConfig().vastUrl
-  if vast = invalid or vast = "" then
+  ' No address, or the admin set zero ads for this break: carry straight on.
+  if count < 1 or vast = invalid or vast = "" then
     runAfterAd(after)
     return
   end if
@@ -73,6 +74,8 @@ sub runAfterAd(after as dynamic)
   else if after.kind = "channel" then
     n = channelNow(after.ch)
     startChannelItem(after.ch, n.index, n.offset)
+  else if after.kind = "resume" then
+    resumeItem(after.item, after.at)
   else if after.kind = "room" then
     onRoomTick()
   end if

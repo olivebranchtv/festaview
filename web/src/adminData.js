@@ -686,3 +686,17 @@ export async function rokuAdCounts(days) {
   if (r.error) throw r.error
   return r.data || []
 }
+
+// ---- Roku ad breaks (network owner): how many ads before a film, midroll breaks, lobby ads ----
+export async function getRokuAdSettings() {
+  const r = await supabase.from('roku_ad_settings').select('*').eq('id', 1)
+  if (r.error) throw r.error
+  return (r.data && r.data[0]) || { preroll_count: 4, midroll_count: 2, midroll_interval_minutes: 10, midroll_ads_per_break: 1, lobby_count: 2 }
+}
+export async function saveRokuAdSettings(s) {
+  const r = await supabase.from('roku_ad_settings').upsert({
+    id: 1, preroll_count: s.preroll_count, midroll_count: s.midroll_count, midroll_interval_minutes: s.midroll_interval_minutes,
+    midroll_ads_per_break: s.midroll_ads_per_break, lobby_count: s.lobby_count, updated_at: new Date().toISOString(),
+  })
+  if (r.error) throw r.error
+}

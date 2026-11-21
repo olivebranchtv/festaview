@@ -29,6 +29,13 @@ sub init()
   m.heroEnding = false
   m.heroTrailer = invalid
   m.heroTried = ""
+
+  ' Ad breaks: the defaults below are replaced by the Festaview admin settings when the feed loads (see loadAdSettings)
+  m.adCfg = { preroll: 4, midBreaks: 2, midMinutes: 10, midAds: 1, lobby: 2 }
+  m.midEligible = false
+  m.midLeft = 0
+  m.nextMid = 0
+  m.currentItem = invalid
   m.heroCurtain = m.top.findNode("heroCurtain")
   m.curtainUp = m.top.findNode("curtainUp")
   m.curtainDown = m.top.findNode("curtainDown")
@@ -89,6 +96,7 @@ end sub
 
 sub buildHome()
   data = m.feedTask.result
+  loadAdSettings(data.adsettings)
   root = CreateObject("roSGNode", "ContentNode")
 
   ' Festaview Cinemas row first: what is playing now and next on each screen
@@ -172,6 +180,60 @@ sub buildHome()
   m.rows.visible = true
   m.rows.setFocus(true)
   onRowFocus()
+end sub
+
+' ---- ad breaks (numbers come from the Festaview admin) ----
+function cfgInt(v as dynamic, fallback as integer) as integer
+  if v = invalid then return fallback
+  return numToInt(v)
+end function
+
+sub loadAdSettings(rows as dynamic)
+  if rows = invalid then return
+  if type(rows) <> "roArray" then return
+  if rows.Count() = 0 then return
+  r = rows[0]
+  if type(r) <> "roAssociativeArray" then return
+  m.adCfg.preroll = cfgInt(r.preroll_count, 4)
+  m.adCfg.midBreaks = cfgInt(r.midroll_count, 2)
+  m.adCfg.midMinutes = cfgInt(r.midroll_interval_minutes, 10)
+  m.adCfg.midAds = cfgInt(r.midroll_ads_per_break, 1)
+  m.adCfg.lobby = cfgInt(r.lobby_count, 2)
+  if m.adCfg.midAds < 1 then m.adCfg.midAds = 1
+end sub
+
+' Midroll: after midMinutes of watching a film, pause it, play the ad break, then carry on from the same spot.
+sub checkMidroll()
+  if m.midEligible <> true then return
+  if m.inAd = true then return
+  if m.room <> invalid then return
+  if m.currentItem = invalid then return
+  if m.midLeft <= 0 then return
+  if m.player.state <> "playing" then return
+  if m.player.position < m.nextMid then return
+  startMidroll()
+end sub
+
+sub startMidroll()
+  m.midLeft = m.midLeft - 1
+  at = Int(m.player.position)
+  m.nextMid = at + (m.adCfg.midMinutes * 60)
+  flushView()
+  m.player.control = "stop"
+  tid = ""
+  if m.currentItem.filmId <> invalid then tid = m.currentItem.filmId
+  runAdThen({ kind: "resume", item: m.currentItem, at: at }, m.adCfg.midAds, "midroll", tid, m.currentItem.title)
+end sub
+
+' Carries on with the film from where the midroll break interrupted it.
+sub resumeItem(item as object, at as integer)
+  item.PlayStart = at
+  m.nowChannel = invalid
+  m.nowItem = { festivalId: item.festivalId, filmId: item.filmId, liveId: item.liveId }
+  m.player.content = item
+  m.player.visible = true
+  m.player.setFocus(true)
+  m.player.control = "play"
 end sub
 
 ' ---- hero banner: the highlighted tile, with its trailer playing muted after a short pause ----
@@ -377,7 +439,7 @@ sub onItemSelected()
     ch = m.channels[idx[1]]
     n = channelNow(ch)
     cur = ch.items[n.index]
-    runAdThen({ kind: "channel", ch: ch }, 1, "preroll", cur.filmId, cur.title)
+    runAdThen({ kind: "channel", ch: ch }, m.adCfg.preroll, "preroll", cur.filmId, cur.title)
     return
   end if
   item = m.rows.content.GetChild(idx[0]).GetChild(idx[1])
@@ -388,12 +450,21 @@ sub onItemSelected()
   else if item.liveId <> invalid then
     tid = item.liveId
   end if
-  runAdThen({ kind: "item", item: item }, 1, "preroll", tid, item.title)
+  runAdThen({ kind: "item", item: item }, m.adCfg.preroll, "preroll", tid, item.title)
 end sub
 
 ' Plays a film or live feed from the rows, after any ad has finished.
 sub playItemNow(item as object)
   flushView()
+  ' Films (not live feeds) get midroll breaks while they play
+  item.PlayStart = 0
+  m.currentItem = item
+  m.midEligible = false
+  if item.filmId <> invalid and m.adCfg.midBreaks > 0 and m.adCfg.midMinutes > 0 then
+    m.midEligible = true
+    m.midLeft = m.adCfg.midBreaks
+    m.nextMid = m.adCfg.midMinutes * 60
+  end if
   m.nowChannel = invalid
   m.nowItem = { festivalId: item.festivalId, filmId: item.filmId, liveId: item.liveId }
   m.player.content = item
@@ -405,6 +476,7 @@ end sub
 ' Plays one film of a channel, starting offset seconds in.
 sub startChannelItem(ch as object, index as integer, offset as integer)
   flushView()
+  m.midEligible = false
   it = ch.items[index]
   m.nowItem = { festivalId: it.festivalId, filmId: it.filmId }
   c = CreateObject("roSGNode", "ContentNode")
@@ -440,6 +512,7 @@ end sub
 
 sub onPosition()
   m.lastPos = m.player.position
+  checkMidroll()
 end sub
 
 ' Records how long the viewer actually watched, then forgets it so it is only sent once.
@@ -499,6 +572,7 @@ sub onPlayerState()
 end sub
 
 sub closePlayer()
+  m.midEligible = false
   flushView()
   m.nowChannel = invalid
   m.nowItem = invalid

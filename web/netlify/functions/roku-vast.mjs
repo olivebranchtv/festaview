@@ -57,6 +57,8 @@ export default async (req) => {
   const done = async (res) => { await Promise.allSettled(pending); return res }
   const enc = (v, d = '') => encodeURIComponent(v || d)
   const tagTemplate = process.env.ROKU_ADTELLIGENT_TAG || ''
+  // For ?debug=1 only: did we ask Adtelligent, and what did it say?
+  let adt = q.get('force') === 'fallback' ? 'skipped' : /^https:\/\//i.test(tagTemplate) ? 'asked' : 'tag not set'
 
   // 1) Adtelligent first (only when the Festaview tag has been set)
   if (q.get('force') !== 'fallback' && /^https:\/\//i.test(tagTemplate)) {
@@ -67,6 +69,7 @@ export default async (req) => {
     const started = Date.now()
     const r = await get(tag, 3000, { 'User-Agent': q.get('ua') || 'Roku' })
     const filled = !!r.body && hasAd(r.body)
+    adt = filled ? 'filled' : r.body ? 'no ads available' : 'no answer (status ' + r.status + ')'
     // Log line: result and size only, no addresses or device ids.
     console.log(JSON.stringify({ src: 'adtelligent', status: r.status, bytes: r.body ? r.body.length : 0, hasAd: filled, ms: Date.now() - started }))
     if (filled) { tally('adtelligent', '', 'filled'); return done(debug ? xml('<debug>adtelligent</debug>') : xml(r.body, { 'X-Ad-Source': 'adtelligent' })) }
@@ -79,10 +82,10 @@ export default async (req) => {
       const vast = spotVast(sp); if (!vast) continue
       console.log(JSON.stringify({ src: 'fallback', spot: 'spot-' + sp.id }))
       tally('fallback', 'spot-' + sp.id, 'filled')
-      return done(debug ? xml('<debug>fallback: ' + sp.title + '</debug>') : xml(vast, { 'X-Ad-Source': 'fallback' }))
+      return done(debug ? xml('<debug>fallback: ' + sp.title + ' | adtelligent: ' + adt + '</debug>') : xml(vast, { 'X-Ad-Source': 'fallback' }))
     }
   }
 
   // 3) nothing to play
-  return done(debug ? xml('<debug>none</debug>') : xml(EMPTY, { 'X-Ad-Source': 'none' }))
+  return done(debug ? xml('<debug>none | adtelligent: ' + adt + '</debug>') : xml(EMPTY, { 'X-Ad-Source': 'none' }))
 }

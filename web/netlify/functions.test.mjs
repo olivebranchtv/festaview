@@ -370,7 +370,11 @@ delete process.env.ROKU_ADTELLIGENT_TAG; adtCalls.length = 0
 spotsData = [{ id: 'cccc', title: 'Quanio TV', video_url: 'https://x.b-cdn.net/c26f8452-a46f-4653-9c9d-01cd91065563/playlist.m3u8', duration_seconds: 16 }]
 rv = await getVast(); rvBody = await rv.text()
 ok('no Adtelligent tag set: straight to our own spots, no outside request', rv.headers.get('X-Ad-Source') === 'fallback' && adtCalls.length === 0)
+rv = await getVast('&debug=1'); rvBody = await rv.text()
+ok('debug says the Adtelligent tag is not set', rvBody.includes('adtelligent: tag not set'))
 process.env.ROKU_ADTELLIGENT_TAG = savedTag
+rv = await getVast('&debug=1'); rvBody = await rv.text()
+ok('debug says Adtelligent had no ads when it answered empty', rvBody.includes('adtelligent: no ads available'))
 ok('the Roku conversion only touches Bunny playlist links', forRoku('https://other.example/a/playlist.m3u8') === 'https://other.example/a/playlist.m3u8' && forRoku('https://z.b-cdn.net/0f-1/playlist.m3u8') === 'https://z.b-cdn.net/0f-1/play_720p.mp4')
 
 // --- Roku ad reports go to the database against the title that was playing
